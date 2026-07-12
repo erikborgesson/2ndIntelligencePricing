@@ -20,13 +20,14 @@ ALLOWED_CATEGORIES = {
     "Systemkameror": {"Canon", "Nikon", "Sony", "Fujifilm"},
     "Hybridkameror": {"Canon", "Nikon", "Sony", "Fujifilm"},
     "Spelkonsoler": {"Sony", "Microsoft", "Nintendo"},
+    # Nya, bekräftade efter upptäcktsläge körts en gång -- se instruktion nedan
 }
 
 BRAND_KEYWORDS = {
-    "Apple": ["iphone", "macbook", "ipad", "imac", "apple watch"],
+    "Apple": ["iphone", "macbook", "ipad", "imac", "apple watch", "airpods"],
     "Samsung": ["samsung", "galaxy"],
     "Google": ["pixel"],
-    "Sony": ["xperia", "playstation", "ps5", "ps4"],
+    "Sony": ["xperia", "playstation", "ps5", "ps4", "alpha", "wh-1000"],
     "OnePlus": ["oneplus"],
     "Huawei": ["huawei"],
     "Xiaomi": ["xiaomi", "redmi", "poco"],
@@ -40,8 +41,13 @@ BRAND_KEYWORDS = {
     "Asus": ["asus", "rog"],
     "Canon": ["canon eos", "canon"],
     "Nikon": ["nikon"],
+    "Fujifilm": ["fujifilm", "fuji x"],
     "Bose": ["bose"],
     "Sonos": ["sonos"],
+    "DJI": ["dji", "mavic", "phantom"],
+    "GoPro": ["gopro"],
+    "LG": ["lg oled", "lg tv"],
+    "Garmin": ["garmin"],
 }
 
 CONDITION_KEYWORDS = {
@@ -53,15 +59,33 @@ CONDITION_KEYWORDS = {
 
 # ---- Searches to run. Add more here as you expand categories/brands. ----
 SEARCHES = [
+    # ---- Redan bekräftade kategorier -- fler modeller inom samma kategori ----
     {"query": "iPhone 15"},
     {"query": "iPhone 14"},
+    {"query": "iPhone 13"},
     {"query": "Samsung Galaxy S23"},
     {"query": "Samsung Galaxy S24"},
     {"query": "Google Pixel"},
-    # New/unverified -- run once, check the printed category list, then decide:
+    {"query": "OnePlus"},
     {"query": "MacBook"},
+    {"query": "Dell XPS"},
+    {"query": "Lenovo ThinkPad"},
     {"query": "Canon EOS"},
+    {"query": "Sony Alpha"},
     {"query": "PlayStation 5"},
+    {"query": "Xbox Series"},
+    {"query": "Nintendo Switch"},
+
+    # ---- Nya kategorier -- upptäcktsläge, sätts INTE in i databasen än ----
+    {"query": "iPad", "discovery_mode": True},
+    {"query": "Samsung Galaxy Tab", "discovery_mode": True},
+    {"query": "Apple Watch", "discovery_mode": True},
+    {"query": "AirPods", "discovery_mode": True},
+    {"query": "Bose hörlurar", "discovery_mode": True},
+    {"query": "Sonos", "discovery_mode": True},
+    {"query": "Samsung TV", "discovery_mode": True},
+    {"query": "DJI drönare", "discovery_mode": True},
+    {"query": "Garmin klocka", "discovery_mode": True},
 ]
 
 def infer_condition(title, description):
@@ -256,20 +280,20 @@ def run_all_searches(searches, max_items=150):
 
                 existing = (
                     supabase.table("current_listings")
-                    .select("current_asking_price, listing_status")
+                    .select("current_asking_price, listing_status, first_seen_at")  # lägg till first_seen_at
                     .eq("listing_id", row["listing_id"])
                     .eq("source_platform", "Blocket")
                     .limit(1)
                     .execute()
                 )
                 existing_row = existing.data[0] if existing.data else None
-
+                
                 if has_changed(row, existing_row):
+                    if existing_row is not None:
+                        row["first_seen_at"] = existing_row["first_seen_at"]  # bevara det sanna ursprungsdatumet
                     row["raw_json_location"] = upload_raw_json(row["listing_id"], detail)
                     supabase.table("historical_transactions").insert(row).execute()
                     inserted += 1
-                else:
-                    skipped_unchanged += 1
 
             except Exception as e:
                 print(f"Fel på {item.get('id')}: {e}")
