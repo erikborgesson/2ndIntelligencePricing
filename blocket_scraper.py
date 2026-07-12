@@ -16,8 +16,10 @@ api = BlocketAPI()
 # them via discovery mode below -- never guess a category string blind. ----
 ALLOWED_CATEGORIES = {
     "Mobiltelefoner": {"Apple", "Samsung", "Google", "Sony", "OnePlus", "Huawei", "Xiaomi", "Nokia", "Motorola"},
-    # "Datorer": {...},        # <- verify real category string before enabling
-    # "Kameror": {...},        # <- verify real category string before enabling
+    "Laptops": {"Apple", "Dell", "HP", "Lenovo", "Asus"},
+    "Systemkameror": {"Canon", "Nikon", "Sony", "Fujifilm"},
+    "Hybridkameror": {"Canon", "Nikon", "Sony", "Fujifilm"},
+    "Spelkonsoler": {"Sony", "Microsoft", "Nintendo"},
 }
 
 BRAND_KEYWORDS = {
@@ -222,74 +224,68 @@ def mark_disappeared_as_removed(source_platform, previously_active_ids, seen_tod
         marked += 1
     return marked, len(disappeared)
 
-def run_search(search_config, max_items=50):
-    query = search_config["query"]
-    discovery = search_config.get("discovery_mode", False)
+def run_all_searches(searches, max_items=50):
+    previously_active_ids = get_previously_active_ids("Blocket")  # fetched ONCE, before anything runs
+    all_seen_today_ids = set()  # accumulated across ALL searches in this run
 
-    results = api.search(query)
-    seen_today_ids = set()
-    inserted = skipped_category = skipped_missing = skipped_unchanged = 0
-    category_counts = {}
+    for search_config in searches:
+        query = search_config["query"]
+        discovery = search_config.get("discovery_mode", False)
+        results = api.search(query)
+        inserted = skipped_category = skipped_missing = skipped_unchanged = 0
+        category_counts = {}
 
-    for item in results["docs"][:max_items]:
-        try:
-            detail = api.get_ad(RecommerceAd(item["id"]))
-            row, category_value = map_to_schema(item, detail)
-            category_counts[category_value] = category_counts.get(category_value, 0) + 1
+        for item in results["docs"][:max_items]:
+            try:
+                detail = api.get_ad(RecommerceAd(item["id"]))
+                row, category_value = map_to_schema(item, detail)
+                category_counts[category_value] = category_counts.get(category_value, 0) + 1
 
-            if discovery:
-                # Don't insert yet -- just report what categories/brands show up
-                continue
+                if discovery:
+                    continue
 
-            allowed_brands = ALLOWED_CATEGORIES.get(category_value)
-            if allowed_brands is None or (row["brand"] and row["brand"] not in allowed_brands and allowed_brands):
-                skipped_category += 1
-                continue
+                allowed_brands = ALLOWED_CATEGORIES.get(category_value)
+                if allowed_brands is None or (row["brand"] and allowed_brands and row["brand"] not in allowed_brands):
+                    skipped_category += 1
+                    continue
+                if not row["current_asking_price"] or not row["brand"]:
+                    skipped_missing += 1
+                    continue
 
-            if not row["current_asking_price"] or not row["brand"]:
-                skipped_missing += 1
-                continue
+                all_seen_today_ids.add(row["listing_id"])  # <-- accumulated globally, not per-search
 
-            seen_today_ids.add(row["listing_id"])
+                existing = (
+                    supabase.table("current_listings")
+                    .select("current_asking_price, listing_status")
+                    .eq("listing_id", row["listing_id"])
+                    .eq("source_platform", "Blocket")
+                    .limit(1)
+                    .execute()
+                )
+                existing_row = existing.data[0] if existing.data else None
 
-            existing = (
-                supabase.table("current_listings")
-                .select("current_asking_price, listing_status")
-                .eq("listing_id", row["listing_id"])
-                .eq("source_platform", "Blocket")
-                .limit(1)
-                .execute()
-            )
-            existing_row = existing.data[0] if existing.data else None
+                if has_changed(row, existing_row):
+                    row["raw_json_location"] = upload_raw_json(row["listing_id"], detail)
+                    supabase.table("historical_transactions").insert(row).execute()
+                    inserted += 1
+                else:
+                    skipped_unchanged += 1
 
-            if has_changed(row, existing_row):
-                row["raw_json_location"] = upload_raw_json(row["listing_id"], detail)
-                supabase.table("historical_transactions").insert(row).execute()
-                inserted += 1
-            else:
-                skipped_unchanged += 1
+            except Exception as e:
+                print(f"Fel på {item.get('id')}: {e}")
+            time.sleep(0.5)
 
-        except Exception as e:
-            print(f"Fel på {item.get('id')}: {e}")
+        if discovery:
+            print(f"[UPPTÄCKTSLÄGE] '{query}' -> {category_counts}")
+        else:
+            print(f"'{query}': {inserted} nya, {skipped_category} fel kategori, "
+                  f"{skipped_missing} saknar pris/märke, {skipped_unchanged} oförändrade.")
 
-        time.sleep(0.5)
-
-    if discovery:
-        print(f"[UPPTÄCKTSLÄGE] '{query}' -> kategorier som hittades: {category_counts}")
-        print("Lägg till rätt kategori i ALLOWED_CATEGORIES och sätt discovery_mode: False för att aktivera.")
-        return
-
-    previously_active = get_previously_active_ids("Blocket")
+    # ---- The ONE, correct removal pass -- after every search has run ----
     marked_removed, total_disappeared = mark_disappeared_as_removed(
-        "Blocket", previously_active, seen_today_ids
+        "Blocket", previously_active_ids, all_seen_today_ids
     )
-
-    print(
-        f"'{query}': {inserted} nya, {skipped_category} fel kategori, "
-        f"{skipped_missing} saknar pris/märke, {skipped_unchanged} oförändrade, "
-        f"{marked_removed}/{total_disappeared} markerade borttagna."
-    )
+    print(f"Borttagningskontroll: {marked_removed}/{total_disappeared} verkligen borttagna markerade.")
 
 if __name__ == "__main__":
-    for search_config in SEARCHES:
-        run_search(search_config)
+    run_all_searches(SEARCHES)
