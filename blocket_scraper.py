@@ -224,7 +224,7 @@ def mark_disappeared_as_removed(source_platform, previously_active_ids, seen_tod
         marked += 1
     return marked, len(disappeared)
 
-def run_all_searches(searches, max_items=50):
+def run_all_searches(searches, max_items=150):
     previously_active_ids = get_previously_active_ids("Blocket")  # fetched ONCE, before anything runs
     all_seen_today_ids = set()  # accumulated across ALL searches in this run
 
