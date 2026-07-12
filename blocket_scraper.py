@@ -24,6 +24,19 @@ BRAND_KEYWORDS = {
     "OnePlus": ["oneplus"],
     "Huawei": ["huawei"],
 }
+CONDITION_KEYWORDS = {
+    "Ny / oanvänd": ["helt ny", "oanvänd", "nyskick", "ny skick"],
+    "Mycket bra skick": ["mycket fint skick", "mycket bra skick", "toppskick"],
+    "Bra skick": ["fint skick", "bra skick", "fungerar perfekt"],
+    "Begagnad": ["begagnad", "använd", "sliten"],
+}
+
+def infer_condition(title, description):
+    text = f"{title or ''} {description or ''}".lower()
+    for condition, keywords in CONDITION_KEYWORDS.items():
+        if any(kw in text for kw in keywords):
+            return condition
+    return "Ej specificerat"  # honest fallback -- we genuinely don't know, don't guess
 
 def infer_brand(title, description):
     text = f"{title or ''} {description or ''}".lower()
@@ -95,7 +108,7 @@ def map_to_schema(item, detail):
         "storage_capacity_gb": storage,
         "sku_variant_code": json_ld.get("sku"),
 
-        "condition_grade_raw": json_ld.get("itemCondition"),
+        "condition_grade_raw": json_ld.get("itemCondition") or infer_condition(title, description),
 
         "original_title": title,
         "original_description": description,
