@@ -12,18 +12,36 @@ supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 api = BlocketAPI()
 
-# ---- Category filter: only real phone listings, no accessories ----
-PHONE_CATEGORIES = {"Mobiltelefoner"}
+# ---- Confirmed-good category filters. Add new ones only after verifying
+# them via discovery mode below -- never guess a category string blind. ----
+ALLOWED_CATEGORIES = {
+    "Mobiltelefoner": {"Apple", "Samsung", "Google", "Sony", "OnePlus", "Huawei", "Xiaomi", "Nokia", "Motorola"},
+    # "Datorer": {...},        # <- verify real category string before enabling
+    # "Kameror": {...},        # <- verify real category string before enabling
+}
 
-# ---- Brand keyword fallback, used when Blocket's own brand field is empty ----
 BRAND_KEYWORDS = {
-    "Apple": ["iphone"],
+    "Apple": ["iphone", "macbook", "ipad", "imac", "apple watch"],
     "Samsung": ["samsung", "galaxy"],
     "Google": ["pixel"],
-    "Sony": ["xperia"],
+    "Sony": ["xperia", "playstation", "ps5", "ps4"],
     "OnePlus": ["oneplus"],
     "Huawei": ["huawei"],
+    "Xiaomi": ["xiaomi", "redmi", "poco"],
+    "Nokia": ["nokia"],
+    "Motorola": ["motorola", "moto g"],
+    "Microsoft": ["xbox", "surface"],
+    "Nintendo": ["nintendo switch"],
+    "Dell": ["dell", "xps"],
+    "HP": ["hp pavilion", "hp spectre", "hp envy"],
+    "Lenovo": ["lenovo", "thinkpad"],
+    "Asus": ["asus", "rog"],
+    "Canon": ["canon eos", "canon"],
+    "Nikon": ["nikon"],
+    "Bose": ["bose"],
+    "Sonos": ["sonos"],
 }
+
 CONDITION_KEYWORDS = {
     "Ny / oanvänd": ["helt ny", "oanvänd", "nyskick", "ny skick"],
     "Mycket bra skick": ["mycket fint skick", "mycket bra skick", "toppskick"],
@@ -31,12 +49,25 @@ CONDITION_KEYWORDS = {
     "Begagnad": ["begagnad", "använd", "sliten"],
 }
 
+# ---- Searches to run. Add more here as you expand categories/brands. ----
+SEARCHES = [
+    {"query": "iPhone 15"},
+    {"query": "iPhone 14"},
+    {"query": "Samsung Galaxy S23"},
+    {"query": "Samsung Galaxy S24"},
+    {"query": "Google Pixel"},
+    # New/unverified -- run once, check the printed category list, then decide:
+    {"query": "MacBook", "discovery_mode": True},
+    {"query": "Canon EOS", "discovery_mode": True},
+    {"query": "PlayStation 5", "discovery_mode": True},
+]
+
 def infer_condition(title, description):
     text = f"{title or ''} {description or ''}".lower()
     for condition, keywords in CONDITION_KEYWORDS.items():
         if any(kw in text for kw in keywords):
             return condition
-    return "Ej specificerat"  # honest fallback -- we genuinely don't know, don't guess
+    return "Ej specificerat"
 
 def infer_brand(title, description):
     text = f"{title or ''} {description or ''}".lower()
@@ -46,7 +77,6 @@ def infer_brand(title, description):
     return None
 
 def parse_storage_gb(raw):
-    """'256 GB' -> 256, '1 TB' -> 1024, None/unparseable -> None"""
     if not raw:
         return None
     match = re.search(r"([\d.]+)\s*(GB|TB)", str(raw), re.IGNORECASE)
@@ -56,7 +86,6 @@ def parse_storage_gb(raw):
     return int(value * 1024) if unit == "TB" else int(value)
 
 def find_price(item, root):
-    """Search-result price first, then fall back to the detail page's structured offer price."""
     if item.get("price_amount") is not None:
         return item["price_amount"]
     offer_price = (root.get("jsonLd", {}) or {}).get("offers", {}).get("price")
@@ -70,7 +99,6 @@ def map_to_schema(item, detail):
     item_data = root.get("itemData", {}) or {}
     json_ld = root.get("jsonLd", {}) or {}
     offers = json_ld.get("offers", {}) or {}
-    shop = root.get("shopProfileData") or {}
     transactable = root.get("transactableData", {}) or {}
     category = item_data.get("category", {}) or {}
     location = item_data.get("location", {}) or {}
@@ -79,10 +107,10 @@ def map_to_schema(item, detail):
 
     title = item_data.get("title") or item.get("heading")
     description = item_data.get("description")
-
     brand = item.get("brand") or json_ld.get("brand") or infer_brand(title, description)
     price = find_price(item, root)
     storage = parse_storage_gb(item.get("memory_size"))
+    condition = json_ld.get("itemCondition") or infer_condition(title, description)
 
     disposed = item_data.get("disposed")
     is_inactive = meta.get("isInactive")
@@ -99,7 +127,6 @@ def map_to_schema(item, detail):
         "snapshot_id": int(time.time() * 1000) % 2_000_000_000,
         "record_type": record_type,
         "ingestion_method": "scrape",
-
         "brand": brand,
         "product_family": brand,
         "model": title,
@@ -107,9 +134,7 @@ def map_to_schema(item, detail):
         "product_subcategory": (category.get("parent") or {}).get("value"),
         "storage_capacity_gb": storage,
         "sku_variant_code": json_ld.get("sku"),
-
-        "condition_grade_raw": json_ld.get("itemCondition") or infer_condition(title, description),
-
+        "condition_grade_raw": condition,
         "original_title": title,
         "original_description": description,
         "category": category.get("value"),
@@ -120,40 +145,31 @@ def map_to_schema(item, detail):
         "listing_status": listing_status,
         "first_seen_at": datetime.now(timezone.utc).isoformat(),
         "listing_language": "sv",
-
         "confirmed_sold": False,
         "sale_confidence_score": sale_confidence,
-
         "country": "SE",
         "city": location.get("postalName"),
         "postal_code": location.get("postalCode"),
         "shipping_available": transactable.get("eligibleForShipping"),
-
         "professional_seller": bool(item_data.get("isWebstore")),
         "private_seller": not bool(item_data.get("isWebstore")),
-
         "image_urls": images if images else None,
         "image_count": len(images),
-
         "source_reliability_score": 0.65,
         "data_completeness_score": None,
         "last_verified_at": datetime.now(timezone.utc).isoformat(),
         "data_schema_version": "schema-v1.0",
         "snapshot_timestamp": datetime.now(timezone.utc).isoformat(),
-
         "raw_json_location": None,
     }
-
     non_null = sum(1 for v in row.values() if v is not None)
     row["data_completeness_score"] = round(non_null / len(row), 2)
-
     return row, category.get("value")
 
 def upload_raw_json(listing_id, detail):
     path = f"blocket/{listing_id}_{int(time.time())}.json"
-    payload = json.dumps(detail).encode()
     supabase.storage.from_("raw-archive").upload(
-        path, payload, {"content-type": "application/json"}
+        path, json.dumps(detail).encode(), {"content-type": "application/json"}
     )
     return f"supabase://raw-archive/{path}"
 
@@ -165,23 +181,76 @@ def has_changed(new_row, existing_row):
         or new_row["listing_status"] != existing_row["listing_status"]
     )
 
-def run_once(query, max_items=50):
+def get_previously_active_ids(source_platform):
+    """Everything we currently think is still active for this source."""
+    res = (
+        supabase.table("current_listings")
+        .select("listing_id")
+        .eq("source_platform", source_platform)
+        .eq("listing_status", "active")
+        .execute()
+    )
+    return {row["listing_id"] for row in res.data}
+
+def mark_disappeared_as_removed(source_platform, previously_active_ids, seen_today_ids):
+    """The core history fix: anything active before but missing from today's
+    results gets a new 'removed' row -- never deleted, never overwritten."""
+    disappeared = previously_active_ids - seen_today_ids
+    marked = 0
+    for listing_id in disappeared:
+        existing = (
+            supabase.table("current_listings")
+            .select("*")
+            .eq("listing_id", listing_id)
+            .eq("source_platform", source_platform)
+            .limit(1)
+            .execute()
+        )
+        if not existing.data:
+            continue
+        old_row = existing.data[0]
+        new_row = {**old_row}
+        for key in ("transaction_id", "inserted_at", "updated_at"):
+            new_row.pop(key, None)
+        new_row["snapshot_id"] = int(time.time() * 1000) % 2_000_000_000
+        new_row["listing_status"] = "removed"
+        new_row["record_type"] = "delisted_unknown"
+        new_row["sale_confidence_score"] = 0.2
+        new_row["last_verified_at"] = datetime.now(timezone.utc).isoformat()
+        new_row["snapshot_timestamp"] = datetime.now(timezone.utc).isoformat()
+        supabase.table("historical_transactions").insert(new_row).execute()
+        marked += 1
+    return marked, len(disappeared)
+
+def run_search(search_config, max_items=50):
+    query = search_config["query"]
+    discovery = search_config.get("discovery_mode", False)
+
     results = api.search(query)
+    seen_today_ids = set()
     inserted = skipped_category = skipped_missing = skipped_unchanged = 0
+    category_counts = {}
 
     for item in results["docs"][:max_items]:
         try:
             detail = api.get_ad(RecommerceAd(item["id"]))
             row, category_value = map_to_schema(item, detail)
+            category_counts[category_value] = category_counts.get(category_value, 0) + 1
 
-            if category_value not in PHONE_CATEGORIES:
+            if discovery:
+                # Don't insert yet -- just report what categories/brands show up
+                continue
+
+            allowed_brands = ALLOWED_CATEGORIES.get(category_value)
+            if allowed_brands is None or (row["brand"] and row["brand"] not in allowed_brands and allowed_brands):
                 skipped_category += 1
                 continue
 
             if not row["current_asking_price"] or not row["brand"]:
                 skipped_missing += 1
-                print(f"Hoppar {item.get('id')}: saknar pris eller märke ({row['original_title']})")
                 continue
+
+            seen_today_ids.add(row["listing_id"])
 
             existing = (
                 supabase.table("current_listings")
@@ -205,8 +274,22 @@ def run_once(query, max_items=50):
 
         time.sleep(0.5)
 
-    print(f"Klar: {inserted} nya, {skipped_category} fel kategori (tillbehör m.m.), "
-          f"{skipped_missing} saknar pris/märke, {skipped_unchanged} oförändrade.")
+    if discovery:
+        print(f"[UPPTÄCKTSLÄGE] '{query}' -> kategorier som hittades: {category_counts}")
+        print("Lägg till rätt kategori i ALLOWED_CATEGORIES och sätt discovery_mode: False för att aktivera.")
+        return
+
+    previously_active = get_previously_active_ids("Blocket")
+    marked_removed, total_disappeared = mark_disappeared_as_removed(
+        "Blocket", previously_active, seen_today_ids
+    )
+
+    print(
+        f"'{query}': {inserted} nya, {skipped_category} fel kategori, "
+        f"{skipped_missing} saknar pris/märke, {skipped_unchanged} oförändrade, "
+        f"{marked_removed}/{total_disappeared} markerade borttagna."
+    )
 
 if __name__ == "__main__":
-    run_once("iPhone 15")
+    for search_config in SEARCHES:
+        run_search(search_config)
