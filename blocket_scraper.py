@@ -81,7 +81,7 @@ def map_to_schema(item, detail):
         "professional_seller": bool(item_data.get("isWebstore")),
         "private_seller": not bool(item_data.get("isWebstore")),
 
-        "image_urls": images[0] if images else None,
+        "image_urls": [images[0]] if images else None,
         "image_count": len(images),
 
         "source_reliability_score": 0.65,
