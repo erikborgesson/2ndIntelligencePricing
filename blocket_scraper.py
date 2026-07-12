@@ -59,9 +59,9 @@ SEARCHES = [
     {"query": "Samsung Galaxy S24"},
     {"query": "Google Pixel"},
     # New/unverified -- run once, check the printed category list, then decide:
-    {"query": "MacBook", "discovery_mode": True},
-    {"query": "Canon EOS", "discovery_mode": True},
-    {"query": "PlayStation 5", "discovery_mode": True},
+    {"query": "MacBook"},
+    {"query": "Canon EOS"},
+    {"query": "PlayStation 5"},
 ]
 
 def infer_condition(title, description):
