@@ -284,19 +284,13 @@ def get_previously_active_ids(source_platform, stale_after_hours=24):
     return {row["listing_id"] for row in res.data}
 
 def mark_disappeared_as_removed(source_platform, previously_active_ids, seen_today_ids):
-    """The core history fix: anything active before but missing from today's
-    results gets a new 'removed' row -- never deleted, never overwritten."""
+    """A listing is marked removed the moment it isn't seen. If it
+    reappears in a later run, has_changed() already flips it back to
+    active automatically -- no separate reactivation logic needed."""
     disappeared = previously_active_ids - seen_today_ids
-
-    # Safety check: if an implausibly large share of previously-active
-    # listings vanished at once, something is probably wrong with the
-    # SEARCHES list (not real Blocket activity) -- don't blindly mark
-    # them removed, flag it instead and skip this pass.
     if previously_active_ids and len(disappeared) / len(previously_active_ids) > 0.5:
-     print(f"VARNING: {len(disappeared)}/{len(previously_active_ids)} annonser verkar "
-            f"försvunna på en gång -- misstänkt, hoppar över borttagningsmarkering denna körning. "
-            f"Kolla om SEARCHES-listan ändrats nyligen.")
-     return 0, len(disappeared)
+        print(f"OBS: {len(disappeared)}/{len(previously_active_ids)} annonser märks borttagna denna körning "
+              f"-- ovanligt högt, värt att kolla om något systemiskt ändrats. Fortsätter ändå (självläker om fel).")
     marked = 0
     for listing_id in disappeared:
         existing = (
