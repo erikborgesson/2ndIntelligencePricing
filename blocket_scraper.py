@@ -284,15 +284,29 @@ def get_previously_active_ids(source_platform, stale_after_hours=24):
     return {row["listing_id"] for row in res.data}
 
 def mark_disappeared_as_removed(source_platform, previously_active_ids, seen_today_ids):
-    """A listing is marked removed the moment it isn't seen. If it
-    reappears in a later run, has_changed() already flips it back to
-    active automatically -- no separate reactivation logic needed."""
-    disappeared = previously_active_ids - seen_today_ids
-    if previously_active_ids and len(disappeared) / len(previously_active_ids) > 0.5:
-        print(f"OBS: {len(disappeared)}/{len(previously_active_ids)} annonser märks borttagna denna körning "
-              f"-- ovanligt högt, värt att kolla om något systemiskt ändrats. Fortsätter ändå (självläker om fel).")
+    """A listing that wasn't seen in today's search results is only
+    confirmed removed if a direct check of its ad page also fails
+    (404/not found). This avoids flapping caused by search pagination
+    simply not reaching every active listing every run."""
+    candidates = previously_active_ids - seen_today_ids
+
+    if previously_active_ids and len(candidates) / len(previously_active_ids) > 0.5:
+        print(f"OBS: {len(candidates)}/{len(previously_active_ids)} annonser syntes inte i dagens sökningar "
+              f"-- kontrollerar varje kandidat direkt innan något markeras borttaget.")
+
     marked = 0
-    for listing_id in disappeared:
+    checked = 0
+    for listing_id in candidates:
+        raw_id = listing_id.split(":")[-1]  # "blocket:24738525" -> "24738525"
+        checked += 1
+        try:
+            api.get_ad(RecommerceAd(raw_id))
+            continue  # still exists -- just missed by pagination, do nothing
+        except Exception:
+            pass  # genuinely gone (404 or similar) -- proceed to mark removed
+        finally:
+            time.sleep(0.3)
+
         existing = (
             supabase.table("current_listings")
             .select("*")
@@ -315,7 +329,8 @@ def mark_disappeared_as_removed(source_platform, previously_active_ids, seen_tod
         new_row["snapshot_timestamp"] = datetime.now(timezone.utc).isoformat()
         supabase.table("historical_transactions").insert(new_row).execute()
         marked += 1
-    return marked, len(disappeared)
+
+    return marked, checked
 
 def run_all_searches(searches, max_items=50):
     previously_active_ids = get_previously_active_ids("Blocket")
