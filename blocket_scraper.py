@@ -21,6 +21,10 @@ ALLOWED_CATEGORIES = {
     "Systemkameror": {"Canon", "Nikon", "Sony", "Fujifilm"},
     "Hybridkameror": {"Canon", "Nikon", "Sony", "Fujifilm"},
     "Spelkonsoler": {"Sony", "Microsoft", "Nintendo"},
+    "Surfplattor och läsplattor": {"Apple", "Samsung"},
+    "Hörlurar": {"Bose"},
+    "TV": {"Samsung"},
+    "Drönare": {"DJI"},
     # Nya, bekräftade efter upptäcktsläge körts en gång -- se instruktion nedan
 }
 
@@ -60,33 +64,37 @@ CONDITION_KEYWORDS = {
 
 # ---- Searches to run. Add more here as you expand categories/brands. ----
 SEARCHES = [
-    # ---- Redan bekräftade kategorier -- fler modeller inom samma kategori ----
-    {"query": "iPhone 15"},
-    {"query": "iPhone 14"},
-    {"query": "iPhone 13"},
-    {"query": "Samsung Galaxy S23"},
-    {"query": "Samsung Galaxy S24"},
-    {"query": "Google Pixel"},
-    {"query": "OnePlus"},
-    {"query": "MacBook"},
-    {"query": "Dell XPS"},
-    {"query": "Lenovo ThinkPad"},
-    {"query": "Canon EOS"},
-    {"query": "Sony Alpha"},
-    {"query": "PlayStation 5"},
-    {"query": "Xbox Series"},
-    {"query": "Nintendo Switch"},
+    # Höga träffar, rena kategorier -- djupare sökning
+    {"query": "iPhone 15", "max_pages": 3},
+    {"query": "iPhone 14", "max_pages": 3},
+    {"query": "iPhone 13", "max_pages": 3},
+    {"query": "Samsung Galaxy S23", "max_pages": 3},
+    {"query": "Samsung Galaxy S24", "max_pages": 3},
+    {"query": "Google Pixel", "max_pages": 3},
+    {"query": "OnePlus", "max_pages": 2},
+    {"query": "MacBook", "max_pages": 3},
+    {"query": "Dell XPS", "max_pages": 2},
+    {"query": "Lenovo ThinkPad", "max_pages": 3},
+    {"query": "Canon EOS", "max_pages": 3},
+    {"query": "Sony Alpha", "max_pages": 1},  # nästan uttömd, bara 1 ny senast
 
-    # ---- Nya kategorier -- upptäcktsläge, sätts INTE in i databasen än ----
-    {"query": "iPad", "discovery_mode": True},
-    {"query": "Samsung Galaxy Tab", "discovery_mode": True},
-    {"query": "Apple Watch", "discovery_mode": True},
-    {"query": "AirPods", "discovery_mode": True},
-    {"query": "Bose hörlurar", "discovery_mode": True},
-    {"query": "Sonos", "discovery_mode": True},
-    {"query": "Samsung TV", "discovery_mode": True},
-    {"query": "DJI drönare", "discovery_mode": True},
-    {"query": "Garmin klocka", "discovery_mode": True},
+    # Mest brus -- grundare sökning
+    {"query": "PlayStation 5", "max_pages": 1},
+    {"query": "Xbox Series", "max_pages": 1},
+    {"query": "Nintendo Switch", "max_pages": 1},
+
+    # Nyligen bekräftade rena kategorier -- aktiveras nu på riktigt
+    {"query": "iPad", "max_pages": 3},
+    {"query": "Samsung Galaxy Tab", "max_pages": 2},
+    {"query": "Bose hörlurar", "max_pages": 3},
+    {"query": "Samsung TV", "max_pages": 3},
+    {"query": "DJI drönare", "max_pages": 3},
+
+    # Fortfarande obeslutade -- kvar i upptäcktsläge, grunt för att spara tid
+    {"query": "Apple Watch", "discovery_mode": True, "max_pages": 1},
+    {"query": "Sonos", "discovery_mode": True, "max_pages": 1},
+    {"query": "Garmin klocka", "discovery_mode": True, "max_pages": 1},
+    # Borttagen: "AirPods" -- söktermen matchar inte Blockets kategoristruktur (2 träffar totalt över flera körningar)
 ]
 
 def infer_condition(title, description):
@@ -238,6 +246,16 @@ def mark_disappeared_as_removed(source_platform, previously_active_ids, seen_tod
     """The core history fix: anything active before but missing from today's
     results gets a new 'removed' row -- never deleted, never overwritten."""
     disappeared = previously_active_ids - seen_today_ids
+
+    # Safety check: if an implausibly large share of previously-active
+    # listings vanished at once, something is probably wrong with the
+    # SEARCHES list (not real Blocket activity) -- don't blindly mark
+    # them removed, flag it instead and skip this pass.
+    if previously_active_ids and len(disappeared) / len(previously_active_ids) > 0.5:
+     print(f"VARNING: {len(disappeared)}/{len(previously_active_ids)} annonser verkar "
+            f"försvunna på en gång -- misstänkt, hoppar över borttagningsmarkering denna körning. "
+            f"Kolla om SEARCHES-listan ändrats nyligen.")
+     return 0, len(disappeared)
     marked = 0
     for listing_id in disappeared:
         existing = (
@@ -271,7 +289,7 @@ def run_all_searches(searches, max_items=150):
     for search_config in searches:
         query = search_config["query"]
         discovery = search_config.get("discovery_mode", False)
-        all_docs = search_all_pages(query, max_pages=3)
+        all_docs = search_all_pages(query, max_pages=search_config.get("max_pages", 3))
         inserted = skipped_category = skipped_missing = skipped_unchanged = 0
         category_counts = {}
 
@@ -296,7 +314,7 @@ def run_all_searches(searches, max_items=150):
 
                 existing = (
                     supabase.table("current_listings")
-                    .select("current_asking_price, listing_status, first_seen_at")  # lägg till first_seen_at
+                    .select("current_asking_price, listing_status, first_seen_at")
                     .eq("listing_id", row["listing_id"])
                     .eq("source_platform", "Blocket")
                     .limit(1)
@@ -306,7 +324,7 @@ def run_all_searches(searches, max_items=150):
                 
                 if has_changed(row, existing_row):
                     if existing_row is not None:
-                        row["first_seen_at"] = existing_row["first_seen_at"]  # bevara det sanna ursprungsdatumet
+                        row["first_seen_at"] = existing_row["first_seen_at"]
                     row["raw_json_location"] = upload_raw_json(row["listing_id"], detail)
                     supabase.table("historical_transactions").insert(row).execute()
                     inserted += 1
