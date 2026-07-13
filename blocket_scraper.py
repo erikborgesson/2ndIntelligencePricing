@@ -3,7 +3,7 @@ import json
 import re
 import time
 import httpx 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from supabase import create_client
 from blocket_api import BlocketAPI, RecommerceAd
 
@@ -82,9 +82,9 @@ SEARCHES = [
     {"query": "Sony Alpha", "max_pages": 1},  # nästan uttömd, bara 1 ny senast
 
     # Mest brus -- grundare sökning
-    {"query": "PlayStation 5", "max_pages": 1},
-    {"query": "Xbox Series", "max_pages": 1},
-    {"query": "Nintendo Switch", "max_pages": 1},
+    {"query": "PlayStation 5", "max_pages": 3},
+    {"query": "Xbox Series", "max_pages": 3},
+    {"query": "Nintendo Switch", "max_pages": 3},
 
     # Nyligen bekräftade rena kategorier -- aktiveras nu på riktigt
     {"query": "iPad", "max_pages": 3},
@@ -268,13 +268,17 @@ def has_changed(new_row, existing_row):
         or new_row["listing_status"] != existing_row["listing_status"]
     )
 
-def get_previously_active_ids(source_platform):
-    """Everything we currently think is still active for this source."""
+def get_previously_active_ids(source_platform, stale_after_hours=24):
+    """Only consider listings 'previously active' if they were confirmed
+    active reasonably recently -- not just 'ever active at some point'.
+    This keeps the comparison fair as the accumulated dataset grows."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=stale_after_hours)).isoformat()
     res = (
         supabase.table("current_listings")
-        .select("listing_id")
+        .select("listing_id, last_verified_at")
         .eq("source_platform", source_platform)
         .eq("listing_status", "active")
+        .gte("last_verified_at", cutoff)
         .execute()
     )
     return {row["listing_id"] for row in res.data}
