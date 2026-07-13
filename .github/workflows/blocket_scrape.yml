@@ -1,8 +1,9 @@
 name: Blocket data collection
 on:
-  schedule:
-    - cron: "0 */6 * * *"
-  workflow_dispatch:
+     schedule:
+       - cron: "5 14 13 7 *"
+       - cron: "5 21 13 7 *"
+     workflow_dispatch:
 
 jobs:
   scrape:
