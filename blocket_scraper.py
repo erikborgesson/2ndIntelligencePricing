@@ -11,6 +11,9 @@ SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
+NOTIFY_EMAIL = os.environ.get("NOTIFY_EMAIL")
+
 api = BlocketAPI()
 
 # ---- Confirmed-good category filters. Add new ones only after verifying
@@ -97,6 +100,40 @@ SEARCHES = [
     # Borttagen: "AirPods" -- söktermen matchar inte Blockets kategoristruktur (2 träffar totalt över flera körningar)
 ]
 
+def send_summary_email(run_stats, marked_removed, total_disappeared):
+    if not RESEND_API_KEY or not NOTIFY_EMAIL:
+        print("RESEND_API_KEY eller NOTIFY_EMAIL saknas -- hoppar över mejl.")
+        return
+
+    total_new = sum(s["inserted"] for s in run_stats)
+    rows_html = "".join(
+        f"<tr><td>{s['query']}</td><td>{s['inserted']}</td><td>{s['skipped_category']}</td>"
+        f"<td>{s['skipped_missing']}</td><td>{s['skipped_unchanged']}</td></tr>"
+        for s in run_stats
+    )
+    html = f"""
+    <h2>Blocket-skrapning: sammanfattning</h2>
+    <p><b>{total_new}</b> nya annonser totalt.
+       <b>{marked_removed}/{total_disappeared}</b> annonser borttagna.</p>
+    <table border="1" cellpadding="4" cellspacing="0">
+      <tr><th>Sökning</th><th>Nya</th><th>Fel kategori</th><th>Saknar data</th><th>Oförändrade</th></tr>
+      {rows_html}
+    </table>
+    """
+    response = httpx.post(
+        "https://api.resend.com/emails",
+        headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
+        json={
+            "from": "Blocket Scraper <onboarding@resend.dev>",
+            "to": [NOTIFY_EMAIL],
+            "subject": f"Blocket-skrapning: {total_new} nya, {marked_removed} borttagna",
+            "html": html,
+        },
+    )
+    if response.status_code >= 400:
+        print(f"Mejl misslyckades: {response.status_code} {response.text}")
+    else:
+        print("Sammanfattningsmejl skickat.")
 def infer_condition(title, description):
     text = f"{title or ''} {description or ''}".lower()
     for condition, keywords in CONDITION_KEYWORDS.items():
@@ -284,6 +321,7 @@ def mark_disappeared_as_removed(source_platform, previously_active_ids, seen_tod
 
 def run_all_searches(searches, max_items=150):
     previously_active_ids = get_previously_active_ids("Blocket")  # fetched ONCE, before anything runs
+    run_stats = []
     all_seen_today_ids = set()  # accumulated across ALL searches in this run
 
     for search_config in searches:
@@ -334,16 +372,20 @@ def run_all_searches(searches, max_items=150):
             time.sleep(0.5)
 
         if discovery:
-            print(f"[UPPTÄCKTSLÄGE] '{query}' -> {category_counts}")
-        else:
-            print(f"'{query}': {inserted} nya, {skipped_category} fel kategori, "
-                  f"{skipped_missing} saknar pris/märke, {skipped_unchanged} oförändrade.")
+                print(f"[UPPTÄCKTSLÄGE] '{query}' -> {category_counts}")
+            else:
+                print(f"'{query}': {inserted} nya, {skipped_category} fel kategori, "
+                      f"{skipped_missing} saknar pris/märke, {skipped_unchanged} oförändrade.")
+                run_stats.append({
+                    "query": query, "inserted": inserted, "skipped_category": skipped_category,
+                    "skipped_missing": skipped_missing, "skipped_unchanged": skipped_unchanged,
+                })
 
     # ---- The ONE, correct removal pass -- after every search has run ----
     marked_removed, total_disappeared = mark_disappeared_as_removed(
         "Blocket", previously_active_ids, all_seen_today_ids
     )
     print(f"Borttagningskontroll: {marked_removed}/{total_disappeared} verkligen borttagna markerade.")
-
+    send_summary_email(run_stats, marked_removed, total_disappeared)
 if __name__ == "__main__":
     run_all_searches(SEARCHES)
