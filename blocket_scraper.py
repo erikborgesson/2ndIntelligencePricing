@@ -389,3 +389,9 @@ def run_all_searches(searches, max_items=50):
     )
     print(f"Borttagningskontroll: {marked_removed}/{total_disappeared} verkligen borttagna markerade.")
     send_summary_email(run_stats, marked_removed, total_disappeared)
+
+if __name__ == "__main__":
+    run_all_searches(SEARCHES)
+
+
+
