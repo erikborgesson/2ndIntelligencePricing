@@ -319,15 +319,16 @@ def mark_disappeared_as_removed(source_platform, previously_active_ids, seen_tod
         marked += 1
     return marked, len(disappeared)
 
-def run_all_searches(searches, max_items=150):
-    previously_active_ids = get_previously_active_ids("Blocket")  # fetched ONCE, before anything runs
+def run_all_searches(searches, max_items=50):
+    previously_active_ids = get_previously_active_ids("Blocket")
+    all_seen_today_ids = set()
     run_stats = []
-    all_seen_today_ids = set()  # accumulated across ALL searches in this run
 
     for search_config in searches:
         query = search_config["query"]
         discovery = search_config.get("discovery_mode", False)
-        all_docs = search_all_pages(query, max_pages=search_config.get("max_pages", 3))
+        max_pages = search_config.get("max_pages", 3)
+        all_docs = search_all_pages(query, max_pages=max_pages)
         inserted = skipped_category = skipped_missing = skipped_unchanged = 0
         category_counts = {}
 
@@ -348,7 +349,7 @@ def run_all_searches(searches, max_items=150):
                     skipped_missing += 1
                     continue
 
-                all_seen_today_ids.add(row["listing_id"])  # <-- accumulated globally, not per-search
+                all_seen_today_ids.add(row["listing_id"])
 
                 existing = (
                     supabase.table("current_listings")
@@ -359,33 +360,32 @@ def run_all_searches(searches, max_items=150):
                     .execute()
                 )
                 existing_row = existing.data[0] if existing.data else None
-                
+
                 if has_changed(row, existing_row):
                     if existing_row is not None:
                         row["first_seen_at"] = existing_row["first_seen_at"]
                     row["raw_json_location"] = upload_raw_json(row["listing_id"], detail)
                     supabase.table("historical_transactions").insert(row).execute()
                     inserted += 1
+                else:
+                    skipped_unchanged += 1
 
             except Exception as e:
                 print(f"Fel på {item.get('id')}: {e}")
             time.sleep(0.5)
 
         if discovery:
-                print(f"[UPPTÄCKTSLÄGE] '{query}' -> {category_counts}")
-            else:
-                print(f"'{query}': {inserted} nya, {skipped_category} fel kategori, "
-                      f"{skipped_missing} saknar pris/märke, {skipped_unchanged} oförändrade.")
-                run_stats.append({
-                    "query": query, "inserted": inserted, "skipped_category": skipped_category,
-                    "skipped_missing": skipped_missing, "skipped_unchanged": skipped_unchanged,
-                })
+            print(f"[UPPTÄCKTSLÄGE] '{query}' -> {category_counts}")
+        else:
+            print(f"'{query}': {inserted} nya, {skipped_category} fel kategori, "
+                  f"{skipped_missing} saknar pris/märke, {skipped_unchanged} oförändrade.")
+            run_stats.append({
+                "query": query, "inserted": inserted, "skipped_category": skipped_category,
+                "skipped_missing": skipped_missing, "skipped_unchanged": skipped_unchanged,
+            })
 
-    # ---- The ONE, correct removal pass -- after every search has run ----
     marked_removed, total_disappeared = mark_disappeared_as_removed(
         "Blocket", previously_active_ids, all_seen_today_ids
     )
     print(f"Borttagningskontroll: {marked_removed}/{total_disappeared} verkligen borttagna markerade.")
     send_summary_email(run_stats, marked_removed, total_disappeared)
-if __name__ == "__main__":
-    run_all_searches(SEARCHES)
