@@ -17,11 +17,40 @@ NOTIFY_EMAIL = os.environ.get("NOTIFY_EMAIL")
 
 NS = "{http://api.tradera.com}"
 
-
-
 TRADERA_SEARCHES = [
-    {"query": "iPhone 15", "max_pages": 2}
+    {"query": "iPhone 15", "max_pages": 3},
+    {"query": "iPhone 14", "max_pages": 3},
+    {"query": "iPhone 13", "max_pages": 3},
+    {"query": "Samsung Galaxy S23", "max_pages": 2},
+    {"query": "Samsung Galaxy S24", "max_pages": 2},
+    {"query": "Google Pixel", "max_pages": 2},
+    {"query": "OnePlus", "max_pages": 2},
+    {"query": "MacBook", "max_pages": 3},
+    {"query": "Dell XPS", "max_pages": 2},
+    {"query": "Lenovo ThinkPad", "max_pages": 2},
+    {"query": "Canon EOS", "max_pages": 2},
+    {"query": "Sony Alpha", "max_pages": 2},
+    {"query": "PlayStation 5", "max_pages": 2},
+    {"query": "Xbox Series", "max_pages": 2},
+    {"query": "Nintendo Switch", "max_pages": 2},
+    {"query": "iPad", "max_pages": 2},
+    {"query": "Samsung Galaxy Tab", "max_pages": 2},
+    {"query": "Bose hörlurar", "max_pages": 2},
+    {"query": "Samsung TV", "max_pages": 2},
+    {"query": "DJI drönare", "max_pages": 2},
 ]
+
+ACCESSORY_KEYWORDS = [
+    "skärmskydd", "skal", "case", "härdat glas", "laddare", "kabel",
+    "hölje", "fodral", "screen protector", "väska", "adapter",
+    "reservdel", "reparation", "linsskydd", "objektivlock",
+]
+
+def looks_like_accessory(title):
+    if not title:
+        return False
+    lowered = title.lower()
+    return any(kw in lowered for kw in ACCESSORY_KEYWORDS)
 
 # ---------------- search ----------------
 
@@ -71,16 +100,10 @@ def parse_search_item(item_el):
     description = text("LongDescription")
     buy_it_now = text("BuyItNowPrice")
     max_bid = text("MaxBid")
-    next_bid = text("NextBid")
     bid_count = text("BidCount")
-    has_bids = text("HasBids") == "true"
-    is_ended = text("IsEnded") == "true"
     item_type = text("ItemType")
     item_url = text("ItemUrl")
     category_id = text("CategoryId")
-    end_date = text("EndDate")
-    seller_id = text("SellerId")
-    seller_alias = text("SellerAlias")
     seller_rating = text("SellerDsrAverage")
 
     images = []
@@ -97,7 +120,6 @@ def parse_search_item(item_el):
     brand = get_attr(item_el, "mobile_brand") or get_attr(item_el, "brand")
     model = get_attr(item_el, "mobile_model") or title
     condition = get_attr(item_el, "condition") or "Ej specificerat"
-    storage_raw = get_attr(item_el, "mobile_disk_memory")
 
     is_auction = item_type != "PureBuyItNow"
     price = float(buy_it_now) if buy_it_now else (float(max_bid) if max_bid else None)
@@ -112,7 +134,7 @@ def parse_search_item(item_el):
         "brand": brand,
         "product_family": brand,
         "model": model,
-        "product_category": category_id,  # raw numeric ID -- GetCategories lookup not built yet
+        "product_category": category_id,
         "condition_grade_raw": condition,
         "original_title": title,
         "original_description": description,
@@ -136,9 +158,6 @@ def parse_search_item(item_el):
         "data_schema_version": "schema-v1.0",
         "snapshot_timestamp": datetime.now(timezone.utc).isoformat(),
         "raw_json_location": None,
-        "_end_date": end_date,  # internal use only, stripped before insert
-        "_has_bids": has_bids,
-        "_is_ended": is_ended,
     }
 
 # ---------------- GetItem: only used to confirm resolution ----------------
@@ -161,7 +180,7 @@ def get_item_status(raw_item_id):
         "end_date": end_date_el.text if end_date_el is not None else None,
     }
 
-# ---------------- Supabase helpers (same pattern as Blocket) ----------------
+# ---------------- Supabase helpers ----------------
 
 def has_changed(new_row, existing_row):
     if existing_row is None:
@@ -182,9 +201,6 @@ def get_previously_active_ids(source_platform):
     return {row["listing_id"] for row in res.data}
 
 def resolve_disappeared(previously_active_ids, seen_today_ids):
-    """Unlike Blocket's 404-only check, Tradera's GetItem tells us the true
-    outcome directly: confirmed sold (Ended + GotWinner), ended-unsold, or
-    still active (just missed by search pagination -- do nothing)."""
     candidates = previously_active_ids - seen_today_ids
     sold, removed, still_active = 0, 0, 0
 
@@ -210,7 +226,7 @@ def resolve_disappeared(previously_active_ids, seen_today_ids):
 
         if not status["ended"]:
             still_active += 1
-            continue  # genuinely still active, just missed by pagination -- self-heals
+            continue
 
         new_row = {**old_row}
         for key in ("transaction_id", "inserted_at", "updated_at"):
@@ -249,16 +265,17 @@ def run_all_tradera_searches(searches):
         query = search_config["query"]
         max_pages = search_config.get("max_pages", 3)
         items = search_all_pages(query, max_pages=max_pages)
-        inserted = skipped_missing = skipped_unchanged = 0
+        inserted = skipped_accessory = skipped_missing = skipped_unchanged = 0
 
         for item_el in items:
             try:
                 row = parse_search_item(item_el)
-                row.pop("_end_date", None)
-                row.pop("_has_bids", None)
-                is_ended = row.pop("_is_ended", False) if "_is_ended" in row else False
             except Exception as e:
                 print(f"Fel vid tolkning: {e}")
+                continue
+
+            if looks_like_accessory(row["original_title"]):
+                skipped_accessory += 1
                 continue
 
             if not row["current_asking_price"] or not row["brand"]:
@@ -288,22 +305,26 @@ def run_all_tradera_searches(searches):
             else:
                 skipped_unchanged += 1
 
-        print(f"'{query}': {inserted} nya, {skipped_missing} saknar pris/märke, {skipped_unchanged} oförändrade.")
-        run_stats.append({"query": query, "inserted": inserted, "skipped_missing": skipped_missing, "skipped_unchanged": skipped_unchanged})
+        print(f"'{query}': {inserted} nya, {skipped_accessory} tillbehör, "
+              f"{skipped_missing} saknar pris/märke, {skipped_unchanged} oförändrade.")
+        run_stats.append({"query": query, "inserted": inserted})
 
     sold, removed, still_active, total_candidates = resolve_disappeared(previously_active_ids, seen_today_ids)
     print(f"Upplösning: {sold} bekräftat sålda, {removed} avslutade utan köpare, "
-          f"{still_active} fortfarande aktiva (missade av paginering), av {total_candidates} kandidater.")
+          f"{still_active} fortfarande aktiva, av {total_candidates} kandidater.")
 
     if RESEND_API_KEY and NOTIFY_EMAIL:
         total_new = sum(s["inserted"] for s in run_stats)
         html = f"<h2>Tradera-skrapning</h2><p>{total_new} nya annonser. {sold} sålda, {removed} avslutade utan köpare.</p>"
-        httpx.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
-            json={"from": "Tradera Scraper <onboarding@resend.dev>", "to": [NOTIFY_EMAIL],
-                  "subject": f"Tradera: {total_new} nya, {sold} sålda", "html": html},
-        )
+        try:
+            httpx.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
+                json={"from": "Tradera Scraper <onboarding@resend.dev>", "to": [NOTIFY_EMAIL],
+                      "subject": f"Tradera: {total_new} nya, {sold} sålda", "html": html},
+            )
+        except Exception as e:
+            print(f"Mejl misslyckades: {e}")
 
 if __name__ == "__main__":
     run_all_tradera_searches(TRADERA_SEARCHES)
