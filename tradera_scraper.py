@@ -81,6 +81,33 @@ def search_all_pages(query, max_pages=3):
 
 # ---------------- parsing ----------------
 
+BRAND_KEYWORDS = {
+    "Apple": ["iphone", "macbook", "ipad", "imac", "apple watch", "airpods"],
+    "Samsung": ["samsung", "galaxy"],
+    "Google": ["pixel"],
+    "Sony": ["xperia", "playstation", "ps5", "ps4", "alpha", "wh-1000"],
+    "OnePlus": ["oneplus"],
+    "Dell": ["dell", "xps"],
+    "HP": ["hp pavilion", "hp spectre", "hp envy"],
+    "Lenovo": ["lenovo", "thinkpad"],
+    "Asus": ["asus", "rog"],
+    "Canon": ["canon eos", "canon"],
+    "Nikon": ["nikon"],
+    "Fujifilm": ["fujifilm", "fuji x"],
+    "Bose": ["bose"],
+    "Sonos": ["sonos"],
+    "DJI": ["dji", "mavic", "phantom"],
+    "Microsoft": ["xbox", "surface"],
+    "Nintendo": ["nintendo switch"],
+}
+
+def infer_brand_from_text(title, description):
+    text = f"{title or ''} {description or ''}".lower()
+    for brand, keywords in BRAND_KEYWORDS.items():
+        if any(kw in text for kw in keywords):
+            return brand
+    return None
+
 def get_attr(item_el, name):
     for tav in item_el.iter(f"{NS}TermAttributeValue"):
         name_el = tav.find(f"{NS}Name")
@@ -117,7 +144,7 @@ def parse_search_item(item_el):
         if thumb:
             images = [thumb]
 
-    brand = get_attr(item_el, "mobile_brand") or get_attr(item_el, "brand")
+    brand = get_attr(item_el, "mobile_brand") or get_attr(item_el, "brand") or infer_brand_from_text(title, description)
     model = get_attr(item_el, "mobile_model") or title
     condition = get_attr(item_el, "condition") or "Ej specificerat"
 
