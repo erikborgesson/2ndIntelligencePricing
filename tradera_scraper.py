@@ -17,15 +17,10 @@ NOTIFY_EMAIL = os.environ.get("NOTIFY_EMAIL")
 
 NS = "{http://api.tradera.com}"
 
+
+
 TRADERA_SEARCHES = [
-    {"query": "iPhone 15", "max_pages": 3},
-    {"query": "iPhone 14", "max_pages": 3},
-    {"query": "iPhone 13", "max_pages": 3},
-    {"query": "Samsung Galaxy S23", "max_pages": 2},
-    {"query": "Samsung Galaxy S24", "max_pages": 2},
-    {"query": "MacBook", "max_pages": 3},
-    {"query": "PlayStation 5", "max_pages": 2},
-    {"query": "Nintendo Switch", "max_pages": 2},
+    {"query": "iPhone 15", "max_pages": 2}
 ]
 
 # ---------------- search ----------------
