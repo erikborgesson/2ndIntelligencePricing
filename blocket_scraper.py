@@ -2,6 +2,7 @@ import os
 import json
 import re
 import time
+import httpx 
 from datetime import datetime, timezone
 from supabase import create_client
 from blocket_api import BlocketAPI, RecommerceAd
@@ -119,6 +120,21 @@ def find_price(item, root):
         return float(offer_price) if offer_price is not None else None
     except (TypeError, ValueError):
         return None
+
+def search_all_pages(query, max_pages=3):
+    """Blocket's own API caps results per call regardless of max_items --
+    real pagination is required to get more than ~50 results."""
+    all_docs = []
+    for page in range(1, max_pages + 1):
+        response = httpx.get(
+            "https://blocket-api.se/v1/search",
+            params={"query": query, "page": page},
+        )
+        docs = response.json().get("docs", [])
+        if not docs:
+            break
+        all_docs.extend(docs)
+    return all_docs
 
 def map_to_schema(item, detail):
     root = detail.get("loaderData", {}).get("item-recommerce", {}) or {}
@@ -255,11 +271,11 @@ def run_all_searches(searches, max_items=150):
     for search_config in searches:
         query = search_config["query"]
         discovery = search_config.get("discovery_mode", False)
-        results = api.search(query)
+        all_docs = search_all_pages(query, max_pages=3)
         inserted = skipped_category = skipped_missing = skipped_unchanged = 0
         category_counts = {}
 
-        for item in results["docs"][:max_items]:
+        for item in all_docs[:max_items]:
             try:
                 detail = api.get_ad(RecommerceAd(item["id"]))
                 row, category_value = map_to_schema(item, detail)
