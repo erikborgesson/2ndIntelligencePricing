@@ -5,6 +5,7 @@ import httpx
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from supabase import create_client
+import re
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
@@ -14,6 +15,25 @@ APP_ID = os.environ["TRADERA_APP_ID"]
 APP_KEY = os.environ["TRADERA_APP_KEY"]
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
 NOTIFY_EMAIL = os.environ.get("NOTIFY_EMAIL")
+
+def looks_like_platform_tag_suffix(title, terms):
+    """Detects the 'Game Title – Platform Name' / 'Game Title (Platform)'
+    pattern used for physical game listings, as opposed to the console
+    itself being the subject of the listing."""
+    if not title:
+        return False
+    lowered = title.lower()
+    for term in terms:
+        pattern = r'[-–(]\s*' + re.escape(term)
+        if re.search(pattern, lowered):
+            return True
+    return False
+
+def looks_like_genuine_hardware(query, title):
+    terms = HARDWARE_QUERY_TERMS.get(query)
+    if not terms:
+        return True  # not a console search, no extra check needed
+    return not looks_like_platform_tag_suffix(title, terms)
 
 NS = "{http://api.tradera.com}"
 
@@ -44,8 +64,16 @@ ACCESSORY_KEYWORDS = [
     "skärmskydd", "skal", "case", "härdat glas", "laddare", "kabel",
     "hölje", "fodral", "screen protector", "väska", "adapter",
     "reservdel", "reparation", "linsskydd", "objektivlock",
+    # gaming-specifikt, nytt:
+    "kamera", "headset", "handkontroll", "kontroll", "styrspak",
+    "mystery chest", "samlarobjekt", "figur",
 ]
 
+HARDWARE_QUERY_TERMS = {
+    "PlayStation 5": ["playstation 5", "ps5"],
+    "Xbox Series": ["xbox series"],
+    "Nintendo Switch": ["nintendo switch", "switch oled", "switch lite"],
+}
 def looks_like_accessory(title):
     if not title:
         return False
@@ -302,6 +330,10 @@ def run_all_tradera_searches(searches):
                 continue
 
             if looks_like_accessory(row["original_title"]):
+                skipped_accessory += 1
+                continue
+                
+            if not looks_like_genuine_hardware(query, row["original_title"]):
                 skipped_accessory += 1
                 continue
 
