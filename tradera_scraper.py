@@ -47,6 +47,10 @@ ACCESSORY_KEYWORDS = [
     "reservdel", "reparation", "linsskydd", "objektivlock",
     "kamera", "headset", "handkontroll", "kontroll", "styrspak",
     "mystery chest", "samlarobjekt", "figur",
+    # earbud/headphone replacement parts, added after seeing a Dell-tagged
+    # earbud-tip listing slip through:
+    "extraproppar", "earphone tips", "ear tips", "memoryskum",
+    "öronproppar", "hörlursproppar", "öronkuddar", "earpads",
 ]
 
 def looks_like_accessory(title):
@@ -63,31 +67,21 @@ HARDWARE_QUERY_TERMS = {
     "Nintendo Switch": ["nintendo switch", "switch oled", "switch lite"],
 }
 
-# Strong, unambiguous signal: these words basically never appear on a real
-# console/hardware listing, only on games/software.
 SOFTWARE_INDICATOR_KEYWORDS = [
     "nedladdningskod", "digital kod", "download code", "season pass",
     "dlc", "expansion pass", "spel till", "steam key", "psn-kod", "psn kod",
 ]
 
 def looks_like_platform_tag_suffix(title, terms):
-    """Detects a platform name appearing as a tag/suffix on a game title,
-    using several common separator conventions -- dash, parenthesis
-    (including when other platform names appear first inside the same
-    parenthesis), and the Swedish 'till'/'för' ('for') pattern."""
     if not title:
         return False
     lowered = title.lower()
     for term in terms:
-        # "Title - Platform" / "Title (Platform" style
         if re.search(r'[-–(]\s*' + re.escape(term), lowered):
             return True
-        # "Title (Other Platform, Platform ...)" -- term appears anywhere
-        # after an opening parenthesis, not just immediately after it
         paren_sections = re.findall(r'\(([^)]*)\)', lowered)
         if any(term in section for section in paren_sections):
             return True
-        # "Title till Platform" / "Title för Platform" (Swedish "for")
         if re.search(r'\b(till|för)\s+' + re.escape(term), lowered):
             return True
     return False
@@ -103,7 +97,7 @@ def looks_like_genuine_hardware(query, title):
         return False
     terms = HARDWARE_QUERY_TERMS.get(query)
     if not terms:
-        return True  # not a console search, no extra check needed
+        return True
     return not looks_like_platform_tag_suffix(title, terms)
 
 BRAND_KEYWORDS = {
