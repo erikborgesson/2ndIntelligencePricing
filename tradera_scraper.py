@@ -172,6 +172,7 @@ def parse_search_item(item_el):
     item_url = text("ItemUrl")
     category_id = text("CategoryId")
     seller_rating = text("SellerDsrAverage")
+    start_date = text("StartDate")  # Tradera's own listing-start timestamp
 
     images = []
     for link in item_el.findall(f"{NS}ImageLinks/{NS}ImageLink"):
@@ -209,7 +210,10 @@ def parse_search_item(item_el):
         "currency": "SEK",
         "current_asking_price": price,
         "listing_status": "active",
-        "first_seen_at": datetime.now(timezone.utc).isoformat(),
+        # Use Tradera's own StartDate (when the listing actually went live),
+        # not our scrape time -- only fall back to "now" if Tradera somehow
+        # doesn't provide one.
+        "first_seen_at": start_date or datetime.now(timezone.utc).isoformat(),
         "listing_language": "sv",
         "confirmed_sold": False,
         "sale_confidence_score": 0.5,
@@ -304,14 +308,15 @@ def resolve_disappeared(previously_active_ids, seen_today_ids):
             new_row["listing_status"] = "sold"
             new_row["confirmed_sold"] = True
             new_row["final_sale_price"] = status["final_price"]
-            new_row["sale_date"] = status["end_date"]
+            new_row["sale_date"] = status["end_date"]  # Tradera's real end date
             new_row["sale_confidence_score"] = 0.95
             new_row["record_type"] = "auction_close"
             sold += 1
         else:
             new_row["listing_status"] = "removed"
             new_row["confirmed_sold"] = False
-            new_row["sale_confidence_score"] = 0.3
+            new_row["sale_date"] = status["end_date"]  # Tradera's real end date, even without a winner
+            new_row["sale_confidence_score"] = 0.9
             new_row["record_type"] = "delisted_unknown"
             removed += 1
 
