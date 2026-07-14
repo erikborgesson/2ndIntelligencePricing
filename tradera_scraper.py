@@ -47,8 +47,6 @@ ACCESSORY_KEYWORDS = [
     "reservdel", "reparation", "linsskydd", "objektivlock",
     "kamera", "headset", "handkontroll", "kontroll", "styrspak",
     "mystery chest", "samlarobjekt", "figur",
-    # earbud/headphone replacement parts, added after seeing a Dell-tagged
-    # earbud-tip listing slip through:
     "extraproppar", "earphone tips", "ear tips", "memoryskum",
     "öronproppar", "hörlursproppar", "öronkuddar", "earpads",
 ]
@@ -58,8 +56,6 @@ def looks_like_accessory(title):
         return False
     lowered = title.lower()
     return any(kw in lowered for kw in ACCESSORY_KEYWORDS)
-
-# ---------------- broader game/software detection ----------------
 
 HARDWARE_QUERY_TERMS = {
     "PlayStation 5": ["playstation 5", "ps5"],
@@ -126,6 +122,18 @@ def infer_brand_from_text(title, description):
         if any(kw in text for kw in keywords):
             return brand
     return None
+
+# ---------------- storage parsing (NEW -- was missing entirely before) ----------------
+
+def parse_storage_gb(raw):
+    """'256 GB' -> 256, '1 TB' -> 1024, None/unparseable -> None"""
+    if not raw:
+        return None
+    match = re.search(r"([\d.]+)\s*(GB|TB)", str(raw), re.IGNORECASE)
+    if not match:
+        return None
+    value, unit = float(match.group(1)), match.group(2).upper()
+    return int(value * 1024) if unit == "TB" else int(value)
 
 # ---------------- resilient Supabase calls ----------------
 
@@ -212,6 +220,15 @@ def parse_search_item(item_el):
     model = get_attr(item_el, "mobile_model") or title
     condition = get_attr(item_el, "condition") or "Ej specificerat"
 
+    # NEW: storage extraction -- try Tradera's own attribute first, then fall
+    # back to parsing it out of the title/description text.
+    storage_raw = get_attr(item_el, "mobile_disk_memory")
+    storage_capacity_gb = (
+        parse_storage_gb(storage_raw)
+        or parse_storage_gb(title)
+        or parse_storage_gb(description)
+    )
+
     is_auction = item_type != "PureBuyItNow"
     price = float(buy_it_now) if buy_it_now else (float(max_bid) if max_bid else None)
 
@@ -226,6 +243,7 @@ def parse_search_item(item_el):
         "product_family": brand,
         "model": model,
         "product_category": category_id,
+        "storage_capacity_gb": storage_capacity_gb,  # NEW
         "condition_grade_raw": condition,
         "original_title": title,
         "original_description": description,
