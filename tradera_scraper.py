@@ -55,26 +55,55 @@ def looks_like_accessory(title):
     lowered = title.lower()
     return any(kw in lowered for kw in ACCESSORY_KEYWORDS)
 
+# ---------------- broader game/software detection ----------------
+
 HARDWARE_QUERY_TERMS = {
     "PlayStation 5": ["playstation 5", "ps5"],
-    "Xbox Series": ["xbox series"],
+    "Xbox Series": ["xbox series", "xbox one"],
     "Nintendo Switch": ["nintendo switch", "switch oled", "switch lite"],
 }
 
+# Strong, unambiguous signal: these words basically never appear on a real
+# console/hardware listing, only on games/software.
+SOFTWARE_INDICATOR_KEYWORDS = [
+    "nedladdningskod", "digital kod", "download code", "season pass",
+    "dlc", "expansion pass", "spel till", "steam key", "psn-kod", "psn kod",
+]
+
 def looks_like_platform_tag_suffix(title, terms):
+    """Detects a platform name appearing as a tag/suffix on a game title,
+    using several common separator conventions -- dash, parenthesis
+    (including when other platform names appear first inside the same
+    parenthesis), and the Swedish 'till'/'för' ('for') pattern."""
     if not title:
         return False
     lowered = title.lower()
     for term in terms:
-        pattern = r'[-–(]\s*' + re.escape(term)
-        if re.search(pattern, lowered):
+        # "Title - Platform" / "Title (Platform" style
+        if re.search(r'[-–(]\s*' + re.escape(term), lowered):
+            return True
+        # "Title (Other Platform, Platform ...)" -- term appears anywhere
+        # after an opening parenthesis, not just immediately after it
+        paren_sections = re.findall(r'\(([^)]*)\)', lowered)
+        if any(term in section for section in paren_sections):
+            return True
+        # "Title till Platform" / "Title för Platform" (Swedish "for")
+        if re.search(r'\b(till|för)\s+' + re.escape(term), lowered):
             return True
     return False
 
+def looks_like_software(title):
+    if not title:
+        return False
+    lowered = title.lower()
+    return any(kw in lowered for kw in SOFTWARE_INDICATOR_KEYWORDS)
+
 def looks_like_genuine_hardware(query, title):
+    if looks_like_software(title):
+        return False
     terms = HARDWARE_QUERY_TERMS.get(query)
     if not terms:
-        return True
+        return True  # not a console search, no extra check needed
     return not looks_like_platform_tag_suffix(title, terms)
 
 BRAND_KEYWORDS = {
@@ -172,7 +201,7 @@ def parse_search_item(item_el):
     item_url = text("ItemUrl")
     category_id = text("CategoryId")
     seller_rating = text("SellerDsrAverage")
-    start_date = text("StartDate")  # Tradera's own listing-start timestamp
+    start_date = text("StartDate")
 
     images = []
     for link in item_el.findall(f"{NS}ImageLinks/{NS}ImageLink"):
@@ -210,9 +239,6 @@ def parse_search_item(item_el):
         "currency": "SEK",
         "current_asking_price": price,
         "listing_status": "active",
-        # Use Tradera's own StartDate (when the listing actually went live),
-        # not our scrape time -- only fall back to "now" if Tradera somehow
-        # doesn't provide one.
         "first_seen_at": start_date or datetime.now(timezone.utc).isoformat(),
         "listing_language": "sv",
         "confirmed_sold": False,
@@ -308,14 +334,14 @@ def resolve_disappeared(previously_active_ids, seen_today_ids):
             new_row["listing_status"] = "sold"
             new_row["confirmed_sold"] = True
             new_row["final_sale_price"] = status["final_price"]
-            new_row["sale_date"] = status["end_date"]  # Tradera's real end date
+            new_row["sale_date"] = status["end_date"]
             new_row["sale_confidence_score"] = 0.95
             new_row["record_type"] = "auction_close"
             sold += 1
         else:
             new_row["listing_status"] = "removed"
             new_row["confirmed_sold"] = False
-            new_row["sale_date"] = status["end_date"]  # Tradera's real end date, even without a winner
+            new_row["sale_date"] = status["end_date"]
             new_row["sale_confidence_score"] = 0.9
             new_row["record_type"] = "delisted_unknown"
             removed += 1
