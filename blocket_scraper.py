@@ -28,6 +28,10 @@ ALLOWED_CATEGORIES = {
     "Hörlurar": {"Bose"},
     "TV": {"Samsung"},
     "Drönare": {"DJI"},
+    "Träningsklockor och aktivitetsarmband": {"Apple", "Garmin"},
+    "Klockor och armbandsur": {"Apple", "Garmin"},
+    "Högtalare": {"Sonos"},
+    "Hemmabiosystem": {"Sonos"},
     # Nya, bekräftade efter upptäcktsläge körts en gång -- se instruktion nedan
 }
 
@@ -94,10 +98,11 @@ SEARCHES = [
     {"query": "DJI drönare", "max_pages": 3},
 
     # Fortfarande obeslutade -- kvar i upptäcktsläge, grunt för att spara tid
-    {"query": "Apple Watch", "discovery_mode": True, "max_pages": 1},
-    {"query": "Sonos", "discovery_mode": True, "max_pages": 1},
-    {"query": "Garmin klocka", "discovery_mode": True, "max_pages": 1},
+    {"query": "Apple Watch", "max_pages": 2},
+    {"query": "Sonos", "max_pages": 2},
+    {"query": "Garmin klocka", "max_pages": 2},
     # Borttagen: "AirPods" -- söktermen matchar inte Blockets kategoristruktur (2 träffar totalt över flera körningar)
+    
 ]
 
 def send_summary_email(run_stats, marked_removed, total_disappeared):
