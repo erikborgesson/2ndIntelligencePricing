@@ -427,6 +427,11 @@ def run_all_tradera_searches(searches):
     sold, removed, still_active, total_candidates = resolve_disappeared(previously_active_ids, seen_today_ids)
     print(f"Upplösning: {sold} bekräftat sålda, {removed} avslutade utan köpare, "
           f"{still_active} fortfarande aktiva, av {total_candidates} kandidater.")
+    try:
+        match_result = execute_with_retry(supabase.rpc("run_product_matching_v2"))
+        print(f"Produktmatchning: {match_result.data}")
+    except Exception as e:
+        print(f"Produktmatchning misslyckades: {e}")
 
     if RESEND_API_KEY and NOTIFY_EMAIL:
         total_new = sum(s["inserted"] for s in run_stats)
