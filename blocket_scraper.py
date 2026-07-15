@@ -406,6 +406,11 @@ def run_all_searches(searches, max_items=50):
         "Blocket", previously_active_ids, all_seen_today_ids
     )
     print(f"Borttagningskontroll: {marked_removed}/{total_disappeared} verkligen borttagna markerade.")
+    try:
+        match_result = execute_with_retry(supabase.rpc("run_product_matching_v2"))
+        print(f"Produktmatchning: {match_result.data}")
+    except Exception as e:
+        print(f"Produktmatchning misslyckades: {e}")
     send_summary_email(run_stats, marked_removed, total_disappeared)
 
 if __name__ == "__main__":
