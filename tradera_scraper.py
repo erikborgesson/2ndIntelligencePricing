@@ -39,6 +39,9 @@ TRADERA_SEARCHES = [
     {"query": "Bose hörlurar", "max_pages": 2},
     {"query": "Samsung TV", "max_pages": 2},
     {"query": "DJI drönare", "max_pages": 2},
+    {"query": "Apple Watch", "max_pages": 2},
+    {"query": "Sonos", "max_pages": 2},
+    {"query": "Garmin klocka", "max_pages": 2},
 ]
 
 ACCESSORY_KEYWORDS = [
@@ -114,6 +117,7 @@ BRAND_KEYWORDS = {
     "DJI": ["dji", "mavic", "phantom"],
     "Microsoft": ["xbox", "surface"],
     "Nintendo": ["nintendo switch"],
+    "Garmin": ["garmin"],
 }
 
 def infer_brand_from_text(title, description):
