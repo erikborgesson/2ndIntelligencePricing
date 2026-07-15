@@ -2,20 +2,16 @@ import os
 import json
 import re
 import time
-import httpx 
+import httpx
 from datetime import datetime, timezone, timedelta
 from supabase import create_client
 from blocket_api import BlocketAPI, RecommerceAd
-
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
 NOTIFY_EMAIL = os.environ.get("NOTIFY_EMAIL")
-
 api = BlocketAPI()
-
 # ---- Confirmed-good category filters. Add new ones only after verifying
 # them via discovery mode below -- never guess a category string blind. ----
 ALLOWED_CATEGORIES = {
@@ -34,7 +30,6 @@ ALLOWED_CATEGORIES = {
     "Hemmabiosystem": {"Sonos"},
     # Nya, bekräftade efter upptäcktsläge körts en gång -- se instruktion nedan
 }
-
 BRAND_KEYWORDS = {
     "Apple": ["iphone", "macbook", "ipad", "imac", "apple watch", "airpods"],
     "Samsung": ["samsung", "galaxy"],
@@ -61,14 +56,12 @@ BRAND_KEYWORDS = {
     "LG": ["lg oled", "lg tv"],
     "Garmin": ["garmin"],
 }
-
 CONDITION_KEYWORDS = {
     "Ny / oanvänd": ["helt ny", "oanvänd", "nyskick", "ny skick"],
     "Mycket bra skick": ["mycket fint skick", "mycket bra skick", "toppskick"],
     "Bra skick": ["fint skick", "bra skick", "fungerar perfekt"],
     "Begagnad": ["begagnad", "använd", "sliten"],
 }
-
 # ---- Searches to run. Add more here as you expand categories/brands. ----
 SEARCHES = [
     # Höga träffar, rena kategorier -- djupare sökning
@@ -84,32 +77,27 @@ SEARCHES = [
     {"query": "Lenovo ThinkPad", "max_pages": 3},
     {"query": "Canon EOS", "max_pages": 3},
     {"query": "Sony Alpha", "max_pages": 1},  # nästan uttömd, bara 1 ny senast
-
     # Mest brus -- grundare sökning
     {"query": "PlayStation 5", "max_pages": 3},
     {"query": "Xbox Series", "max_pages": 3},
     {"query": "Nintendo Switch", "max_pages": 3},
-
     # Nyligen bekräftade rena kategorier -- aktiveras nu på riktigt
     {"query": "iPad", "max_pages": 3},
     {"query": "Samsung Galaxy Tab", "max_pages": 2},
     {"query": "Bose hörlurar", "max_pages": 3},
     {"query": "Samsung TV", "max_pages": 3},
     {"query": "DJI drönare", "max_pages": 3},
-
     # Fortfarande obeslutade -- kvar i upptäcktsläge, grunt för att spara tid
     {"query": "Apple Watch", "max_pages": 2},
     {"query": "Sonos", "max_pages": 2},
     {"query": "Garmin klocka", "max_pages": 2},
     # Borttagen: "AirPods" -- söktermen matchar inte Blockets kategoristruktur (2 träffar totalt över flera körningar)
-    
-]
 
+]
 def send_summary_email(run_stats, marked_removed, total_disappeared):
     if not RESEND_API_KEY or not NOTIFY_EMAIL:
         print("RESEND_API_KEY eller NOTIFY_EMAIL saknas -- hoppar över mejl.")
         return
-
     total_new = sum(s["inserted"] for s in run_stats)
     rows_html = "".join(
         f"<tr><td>{s['query']}</td><td>{s['inserted']}</td><td>{s['skipped_category']}</td>"
@@ -145,14 +133,12 @@ def infer_condition(title, description):
         if any(kw in text for kw in keywords):
             return condition
     return "Ej specificerat"
-
 def infer_brand(title, description):
     text = f"{title or ''} {description or ''}".lower()
     for brand, keywords in BRAND_KEYWORDS.items():
         if any(kw in text for kw in keywords):
             return brand
     return None
-
 def parse_storage_gb(raw):
     if not raw:
         return None
@@ -161,7 +147,6 @@ def parse_storage_gb(raw):
         return None
     value, unit = float(match.group(1)), match.group(2).upper()
     return int(value * 1024) if unit == "TB" else int(value)
-
 def find_price(item, root):
     if item.get("price_amount") is not None:
         return item["price_amount"]
@@ -170,7 +155,6 @@ def find_price(item, root):
         return float(offer_price) if offer_price is not None else None
     except (TypeError, ValueError):
         return None
-
 def search_all_pages(query, max_pages=3):
     """Blocket's own API caps results per call regardless of max_items --
     real pagination is required to get more than ~50 results."""
@@ -185,7 +169,6 @@ def search_all_pages(query, max_pages=3):
             break
         all_docs.extend(docs)
     return all_docs
-
 def map_to_schema(item, detail):
     root = detail.get("loaderData", {}).get("item-recommerce", {}) or {}
     item_data = root.get("itemData", {}) or {}
@@ -196,14 +179,12 @@ def map_to_schema(item, detail):
     location = item_data.get("location", {}) or {}
     meta = item_data.get("meta", {}) or {}
     images = item_data.get("images") or []
-
     title = item_data.get("title") or item.get("heading")
     description = item_data.get("description")
     brand = item.get("brand") or json_ld.get("brand") or infer_brand(title, description)
     price = find_price(item, root)
     storage = parse_storage_gb(item.get("memory_size"))
     condition = json_ld.get("itemCondition") or infer_condition(title, description)
-
     disposed = item_data.get("disposed")
     is_inactive = meta.get("isInactive")
     availability = offers.get("availability")
@@ -211,7 +192,6 @@ def map_to_schema(item, detail):
         listing_status, record_type, sale_confidence = "removed", "delisted_unknown", 0.2
     else:
         listing_status, record_type, sale_confidence = "active", "active_listing", 0.3
-
     row = {
         "listing_id": f"blocket:{item.get('id')}",
         "source_platform": "Blocket",
@@ -257,14 +237,12 @@ def map_to_schema(item, detail):
     non_null = sum(1 for v in row.values() if v is not None)
     row["data_completeness_score"] = round(non_null / len(row), 2)
     return row, category.get("value")
-
 def upload_raw_json(listing_id, detail):
     path = f"blocket/{listing_id}_{int(time.time())}.json"
     supabase.storage.from_("raw-archive").upload(
         path, json.dumps(detail).encode(), {"content-type": "application/json"}
     )
     return f"supabase://raw-archive/{path}"
-
 def has_changed(new_row, existing_row):
     if existing_row is None:
         return True
@@ -272,7 +250,6 @@ def has_changed(new_row, existing_row):
         new_row["current_asking_price"] != existing_row["current_asking_price"]
         or new_row["listing_status"] != existing_row["listing_status"]
     )
-
 def get_previously_active_ids(source_platform, stale_after_hours=24):
     """Only consider listings 'previously active' if they were confirmed
     active reasonably recently -- not just 'ever active at some point'.
@@ -287,18 +264,15 @@ def get_previously_active_ids(source_platform, stale_after_hours=24):
         .execute()
     )
     return {row["listing_id"] for row in res.data}
-
 def mark_disappeared_as_removed(source_platform, previously_active_ids, seen_today_ids):
     """A listing that wasn't seen in today's search results is only
     confirmed removed if a direct check of its ad page also fails
     (404/not found). This avoids flapping caused by search pagination
     simply not reaching every active listing every run."""
     candidates = previously_active_ids - seen_today_ids
-
     if previously_active_ids and len(candidates) / len(previously_active_ids) > 0.5:
         print(f"OBS: {len(candidates)}/{len(previously_active_ids)} annonser syntes inte i dagens sökningar "
               f"-- kontrollerar varje kandidat direkt innan något markeras borttaget.")
-
     marked = 0
     checked = 0
     for listing_id in candidates:
@@ -311,7 +285,6 @@ def mark_disappeared_as_removed(source_platform, previously_active_ids, seen_tod
             pass  # genuinely gone (404 or similar) -- proceed to mark removed
         finally:
             time.sleep(0.3)
-
         existing = (
             supabase.table("current_listings")
             .select("*")
@@ -334,14 +307,11 @@ def mark_disappeared_as_removed(source_platform, previously_active_ids, seen_tod
         new_row["snapshot_timestamp"] = datetime.now(timezone.utc).isoformat()
         supabase.table("historical_transactions").insert(new_row).execute()
         marked += 1
-
     return marked, checked
-
 def run_all_searches(searches, max_items=50):
     previously_active_ids = get_previously_active_ids("Blocket")
     all_seen_today_ids = set()
     run_stats = []
-
     for search_config in searches:
         query = search_config["query"]
         discovery = search_config.get("discovery_mode", False)
@@ -349,16 +319,13 @@ def run_all_searches(searches, max_items=50):
         all_docs = search_all_pages(query, max_pages=max_pages)
         inserted = skipped_category = skipped_missing = skipped_unchanged = 0
         category_counts = {}
-
         for item in all_docs[:max_items]:
             try:
                 detail = api.get_ad(RecommerceAd(item["id"]))
                 row, category_value = map_to_schema(item, detail)
                 category_counts[category_value] = category_counts.get(category_value, 0) + 1
-
                 if discovery:
                     continue
-
                 allowed_brands = ALLOWED_CATEGORIES.get(category_value)
                 if allowed_brands is None or (row["brand"] and allowed_brands and row["brand"] not in allowed_brands):
                     skipped_category += 1
@@ -366,9 +333,7 @@ def run_all_searches(searches, max_items=50):
                 if not row["current_asking_price"] or not row["brand"]:
                     skipped_missing += 1
                     continue
-
                 all_seen_today_ids.add(row["listing_id"])
-
                 existing = (
                     supabase.table("current_listings")
                     .select("current_asking_price, listing_status, first_seen_at")
@@ -378,7 +343,6 @@ def run_all_searches(searches, max_items=50):
                     .execute()
                 )
                 existing_row = existing.data[0] if existing.data else None
-
                 if has_changed(row, existing_row):
                     if existing_row is not None:
                         row["first_seen_at"] = existing_row["first_seen_at"]
@@ -387,11 +351,9 @@ def run_all_searches(searches, max_items=50):
                     inserted += 1
                 else:
                     skipped_unchanged += 1
-
             except Exception as e:
                 print(f"Fel på {item.get('id')}: {e}")
             time.sleep(0.5)
-
         if discovery:
             print(f"[UPPTÄCKTSLÄGE] '{query}' -> {category_counts}")
         else:
@@ -401,20 +363,17 @@ def run_all_searches(searches, max_items=50):
                 "query": query, "inserted": inserted, "skipped_category": skipped_category,
                 "skipped_missing": skipped_missing, "skipped_unchanged": skipped_unchanged,
             })
-
     marked_removed, total_disappeared = mark_disappeared_as_removed(
         "Blocket", previously_active_ids, all_seen_today_ids
     )
     print(f"Borttagningskontroll: {marked_removed}/{total_disappeared} verkligen borttagna markerade.")
     try:
-        match_result = execute_with_retry(supabase.rpc("run_product_matching_v2"))
+        # FIX: "execute_with_retry" var aldrig definierad/importerad i den här
+        # filen -- anropet kraschade med NameError. Kör RPC:n direkt istället.
+        match_result = supabase.rpc("run_product_matching_v2").execute()
         print(f"Produktmatchning: {match_result.data}")
     except Exception as e:
         print(f"Produktmatchning misslyckades: {e}")
     send_summary_email(run_stats, marked_removed, total_disappeared)
-
 if __name__ == "__main__":
     run_all_searches(SEARCHES)
-
-
-
