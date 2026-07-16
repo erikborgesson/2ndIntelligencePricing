@@ -21,11 +21,11 @@ ALLOWED_CATEGORIES = {
     "Hybridkameror": {"Canon", "Nikon", "Sony", "Fujifilm"},
     "Spelkonsoler": {"Sony", "Microsoft", "Nintendo"},
     "Surfplattor och läsplattor": {"Apple", "Samsung"},
-    "Hörlurar": {"Bose"},
+    "Hörlurar": {"Bose", "Sony"},
     "TV": {"Samsung"},
     "Drönare": {"DJI"},
-    "Träningsklockor och aktivitetsarmband": {"Apple", "Garmin"},
-    "Klockor och armbandsur": {"Apple", "Garmin"},
+    "Träningsklockor och aktivitetsarmband": {"Apple", "Garmin", "Samsung"},
+    "Klockor och armbandsur": {"Apple", "Garmin", "Samsung"},
     "Högtalare": {"Sonos"},
     "Hemmabiosystem": {"Sonos"},
     # Nya, bekräftade efter upptäcktsläge körts en gång -- se instruktion nedan
@@ -103,10 +103,15 @@ SEARCHES = [
     {"query": "iPad", "max_pages": 3},
     {"query": "Samsung Galaxy Tab", "max_pages": 2},
     {"query": "Bose hörlurar", "max_pages": 3},
+    # Nytt märke inom redan verifierad kategori -- Sony WH-1000-serien är en
+    # av världens mest omsatta andrahandshörlurar, saknades helt tidigare.
+    {"query": "Sony WH-1000", "max_pages": 2},
     {"query": "Samsung TV", "max_pages": 3},
     {"query": "DJI drönare", "max_pages": 3},
     # Fortfarande obeslutade -- kvar i upptäcktsläge, grunt för att spara tid
     {"query": "Apple Watch", "max_pages": 2},
+    # Nytt märke inom redan verifierad klock-kategori.
+    {"query": "Samsung Galaxy Watch", "max_pages": 2},
     {"query": "Sonos", "max_pages": 2},
     {"query": "Garmin klocka", "max_pages": 2},
     # Borttagen: "AirPods" -- söktermen matchar inte Blockets kategoristruktur (2 träffar totalt över flera körningar)
