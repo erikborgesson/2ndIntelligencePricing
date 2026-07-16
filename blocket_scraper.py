@@ -79,16 +79,25 @@ SEARCHES = [
     {"query": "Samsung Galaxy S24", "max_pages": 3},
     {"query": "Samsung Galaxy S22", "max_pages": 2},
     {"query": "Samsung Galaxy S21", "max_pages": 2},
+    {"query": "Samsung Galaxy S20", "max_pages": 2},
     {"query": "Google Pixel", "max_pages": 3},
     {"query": "OnePlus", "max_pages": 2},
     {"query": "MacBook", "max_pages": 3},
+    # Kompletterande, riktade sökningar för en högvolym-generation som annars
+    # riskerar att drunkna bakom sidgränsen i den generiska "MacBook"-sökningen.
+    {"query": "MacBook Air M1", "max_pages": 2},
+    {"query": "MacBook Pro M1", "max_pages": 2},
     {"query": "Dell XPS", "max_pages": 2},
     {"query": "Lenovo ThinkPad", "max_pages": 3},
     {"query": "Canon EOS", "max_pages": 3},
     {"query": "Sony Alpha", "max_pages": 1},  # nästan uttömd, bara 1 ny senast
     # Mest brus -- grundare sökning
     {"query": "PlayStation 5", "max_pages": 3},
+    # Föregående konsolgeneration -- helt frånvarande tidigare trots att de
+    # fortfarande omsätts i stor volym på andrahandsmarknaden.
+    {"query": "PlayStation 4", "max_pages": 2},
     {"query": "Xbox Series", "max_pages": 3},
+    {"query": "Xbox One", "max_pages": 2},
     {"query": "Nintendo Switch", "max_pages": 3},
     # Nyligen bekräftade rena kategorier -- aktiveras nu på riktigt
     {"query": "iPad", "max_pages": 3},
