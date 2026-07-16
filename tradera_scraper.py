@@ -6,24 +6,29 @@ import httpx
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from supabase import create_client
-
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-
 APP_ID = os.environ["TRADERA_APP_ID"]
 APP_KEY = os.environ["TRADERA_APP_KEY"]
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
 NOTIFY_EMAIL = os.environ.get("NOTIFY_EMAIL")
-
 NS = "{http://api.tradera.com}"
-
 TRADERA_SEARCHES = [
     {"query": "iPhone 15", "max_pages": 3},
     {"query": "iPhone 14", "max_pages": 3},
     {"query": "iPhone 13", "max_pages": 3},
+    # Tidigare kända luckor -- lades till för att undvika permanent förlorad
+    # prishistorik för generationer som redan omsätts på andrahandsmarknaden,
+    # även om run_product_matching_v2 ännu inte har egna regex-grenar för dem
+    # (matchningen är retroaktiv, så det tas igen den dagen SQL-katalogen byggs ut).
+    {"query": "iPhone 12", "max_pages": 3},
+    {"query": "iPhone 11", "max_pages": 2},
+    {"query": "iPhone SE", "max_pages": 2},
     {"query": "Samsung Galaxy S23", "max_pages": 2},
     {"query": "Samsung Galaxy S24", "max_pages": 2},
+    {"query": "Samsung Galaxy S22", "max_pages": 2},
+    {"query": "Samsung Galaxy S21", "max_pages": 2},
     {"query": "Google Pixel", "max_pages": 2},
     {"query": "OnePlus", "max_pages": 2},
     {"query": "MacBook", "max_pages": 3},
@@ -43,7 +48,6 @@ TRADERA_SEARCHES = [
     {"query": "Sonos", "max_pages": 2},
     {"query": "Garmin klocka", "max_pages": 2},
 ]
-
 ACCESSORY_KEYWORDS = [
     "skärmskydd", "skal", "case", "härdat glas", "laddare", "kabel",
     "hölje", "fodral", "screen protector", "väska", "adapter",
@@ -53,24 +57,20 @@ ACCESSORY_KEYWORDS = [
     "extraproppar", "earphone tips", "ear tips", "memoryskum",
     "öronproppar", "hörlursproppar", "öronkuddar", "earpads",
 ]
-
 def looks_like_accessory(title):
     if not title:
         return False
     lowered = title.lower()
     return any(kw in lowered for kw in ACCESSORY_KEYWORDS)
-
 HARDWARE_QUERY_TERMS = {
     "PlayStation 5": ["playstation 5", "ps5"],
     "Xbox Series": ["xbox series", "xbox one"],
     "Nintendo Switch": ["nintendo switch", "switch oled", "switch lite"],
 }
-
 SOFTWARE_INDICATOR_KEYWORDS = [
     "nedladdningskod", "digital kod", "download code", "season pass",
     "dlc", "expansion pass", "spel till", "steam key", "psn-kod", "psn kod",
 ]
-
 def looks_like_platform_tag_suffix(title, terms):
     if not title:
         return False
@@ -84,13 +84,11 @@ def looks_like_platform_tag_suffix(title, terms):
         if re.search(r'\b(till|för)\s+' + re.escape(term), lowered):
             return True
     return False
-
 def looks_like_software(title):
     if not title:
         return False
     lowered = title.lower()
     return any(kw in lowered for kw in SOFTWARE_INDICATOR_KEYWORDS)
-
 def looks_like_genuine_hardware(query, title):
     if looks_like_software(title):
         return False
@@ -98,7 +96,6 @@ def looks_like_genuine_hardware(query, title):
     if not terms:
         return True
     return not looks_like_platform_tag_suffix(title, terms)
-
 BRAND_KEYWORDS = {
     "Apple": ["iphone", "macbook", "ipad", "imac", "apple watch", "airpods"],
     "Samsung": ["samsung", "galaxy"],
@@ -119,16 +116,13 @@ BRAND_KEYWORDS = {
     "Nintendo": ["nintendo switch"],
     "Garmin": ["garmin"],
 }
-
 def infer_brand_from_text(title, description):
     text = f"{title or ''} {description or ''}".lower()
     for brand, keywords in BRAND_KEYWORDS.items():
         if any(kw in text for kw in keywords):
             return brand
     return None
-
 # ---------------- storage parsing (NEW -- was missing entirely before) ----------------
-
 def parse_storage_gb(raw):
     """'256 GB' -> 256, '1 TB' -> 1024, None/unparseable -> None"""
     if not raw:
@@ -138,9 +132,7 @@ def parse_storage_gb(raw):
         return None
     value, unit = float(match.group(1)), match.group(2).upper()
     return int(value * 1024) if unit == "TB" else int(value)
-
 # ---------------- resilient Supabase calls ----------------
-
 def execute_with_retry(query_builder, retries=3, delay=2):
     """Retries a Supabase query on transient network errors instead of
     letting one flaky request crash the whole run."""
@@ -153,16 +145,13 @@ def execute_with_retry(query_builder, retries=3, delay=2):
             print(f"Supabase-anrop misslyckades (försök {attempt + 1}/{retries}): {e}")
             time.sleep(delay)
     raise last_exception
-
 # ---------------- search ----------------
-
 def search_tradera(query, page=1):
     url = "https://api.tradera.com/v3/searchservice.asmx/Search"
     params = {"appId": APP_ID, "appKey": APP_KEY, "query": query, "categoryId": 0, "pageNumber": page}
     response = httpx.get(url, params=params, timeout=20.0, follow_redirects=True)
     response.raise_for_status()
     return ET.fromstring(response.text)
-
 def search_all_pages(query, max_pages=3):
     all_items = []
     for page in range(1, max_pages + 1):
@@ -180,9 +169,7 @@ def search_all_pages(query, max_pages=3):
             break
         time.sleep(0.3)
     return all_items
-
 # ---------------- parsing ----------------
-
 def get_attr(item_el, name):
     for tav in item_el.iter(f"{NS}TermAttributeValue"):
         name_el = tav.find(f"{NS}Name")
@@ -191,12 +178,10 @@ def get_attr(item_el, name):
             if values:
                 return values[0]
     return None
-
 def parse_search_item(item_el):
     def text(tag):
         el = item_el.find(f"{NS}{tag}")
         return el.text if el is not None else None
-
     item_id = text("Id")
     title = text("ShortDescription")
     description = text("LongDescription")
@@ -208,7 +193,6 @@ def parse_search_item(item_el):
     category_id = text("CategoryId")
     seller_rating = text("SellerDsrAverage")
     start_date = text("StartDate")
-
     images = []
     for link in item_el.findall(f"{NS}ImageLinks/{NS}ImageLink"):
         fmt = link.find(f"{NS}Format")
@@ -219,11 +203,9 @@ def parse_search_item(item_el):
         thumb = text("ThumbnailLink")
         if thumb:
             images = [thumb]
-
     brand = get_attr(item_el, "mobile_brand") or get_attr(item_el, "brand") or infer_brand_from_text(title, description)
     model = get_attr(item_el, "mobile_model") or title
     condition = get_attr(item_el, "condition") or "Ej specificerat"
-
     # NEW: storage extraction -- try Tradera's own attribute first, then fall
     # back to parsing it out of the title/description text.
     storage_raw = get_attr(item_el, "mobile_disk_memory")
@@ -232,10 +214,8 @@ def parse_search_item(item_el):
         or parse_storage_gb(title)
         or parse_storage_gb(description)
     )
-
     is_auction = item_type != "PureBuyItNow"
     price = float(buy_it_now) if buy_it_now else (float(max_bid) if max_bid else None)
-
     return {
         "listing_id": f"tradera:{item_id}",
         "source_platform": "Tradera",
@@ -272,9 +252,7 @@ def parse_search_item(item_el):
         "snapshot_timestamp": datetime.now(timezone.utc).isoformat(),
         "raw_json_location": None,
     }
-
 # ---------------- GetItem: only used to confirm resolution ----------------
-
 def get_item_status(raw_item_id):
     url = "https://api.tradera.com/v3/publicservice.asmx/GetItem"
     params = {"appId": APP_ID, "appKey": APP_KEY, "itemId": raw_item_id}
@@ -292,9 +270,7 @@ def get_item_status(raw_item_id):
         "final_price": float(max_bid_el.text) if max_bid_el is not None else None,
         "end_date": end_date_el.text if end_date_el is not None else None,
     }
-
 # ---------------- Supabase helpers ----------------
-
 def has_changed(new_row, existing_row):
     if existing_row is None:
         return True
@@ -302,7 +278,6 @@ def has_changed(new_row, existing_row):
         new_row["current_asking_price"] != existing_row["current_asking_price"]
         or new_row["listing_status"] != existing_row["listing_status"]
     )
-
 def get_previously_active_ids(source_platform):
     res = execute_with_retry(
         supabase.table("current_listings")
@@ -311,11 +286,9 @@ def get_previously_active_ids(source_platform):
         .eq("listing_status", "active")
     )
     return {row["listing_id"] for row in res.data}
-
 def resolve_disappeared(previously_active_ids, seen_today_ids):
     candidates = previously_active_ids - seen_today_ids
     sold, removed, still_active = 0, 0, 0
-
     for listing_id in candidates:
         raw_id = listing_id.split(":")[-1]
         existing = execute_with_retry(
@@ -328,24 +301,20 @@ def resolve_disappeared(previously_active_ids, seen_today_ids):
         if not existing.data:
             continue
         old_row = existing.data[0]
-
         try:
             status = get_item_status(raw_id)
         except Exception:
             status = {"ended": True, "got_winner": False, "final_price": None, "end_date": None}
         time.sleep(0.3)
-
         if not status["ended"]:
             still_active += 1
             continue
-
         new_row = {**old_row}
         for key in ("transaction_id", "inserted_at", "updated_at"):
             new_row.pop(key, None)
         new_row["snapshot_id"] = int(time.time() * 1000) % 2_000_000_000
         new_row["last_verified_at"] = datetime.now(timezone.utc).isoformat()
         new_row["snapshot_timestamp"] = datetime.now(timezone.utc).isoformat()
-
         if status["got_winner"]:
             new_row["listing_status"] = "sold"
             new_row["confirmed_sold"] = True
@@ -361,45 +330,34 @@ def resolve_disappeared(previously_active_ids, seen_today_ids):
             new_row["sale_confidence_score"] = 0.9
             new_row["record_type"] = "delisted_unknown"
             removed += 1
-
         execute_with_retry(supabase.table("historical_transactions").insert(new_row))
-
     return sold, removed, still_active, len(candidates)
-
 # ---------------- main run ----------------
-
 def run_all_tradera_searches(searches):
     previously_active_ids = get_previously_active_ids("Tradera")
     seen_today_ids = set()
     run_stats = []
-
     for search_config in searches:
         query = search_config["query"]
         max_pages = search_config.get("max_pages", 3)
         items = search_all_pages(query, max_pages=max_pages)
         inserted = skipped_accessory = skipped_missing = skipped_unchanged = 0
-
         for item_el in items:
             try:
                 row = parse_search_item(item_el)
             except Exception as e:
                 print(f"Fel vid tolkning: {e}")
                 continue
-
             if looks_like_accessory(row["original_title"]):
                 skipped_accessory += 1
                 continue
-
             if not looks_like_genuine_hardware(query, row["original_title"]):
                 skipped_accessory += 1
                 continue
-
             if not row["current_asking_price"] or not row["brand"]:
                 skipped_missing += 1
                 continue
-
             seen_today_ids.add(row["listing_id"])
-
             existing = execute_with_retry(
                 supabase.table("current_listings")
                 .select("current_asking_price, listing_status, first_seen_at")
@@ -408,10 +366,8 @@ def run_all_tradera_searches(searches):
                 .limit(1)
             )
             existing_row = existing.data[0] if existing.data else None
-
             non_null = sum(1 for v in row.values() if v is not None)
             row["data_completeness_score"] = round(non_null / len(row), 2)
-
             if has_changed(row, existing_row):
                 if existing_row is not None:
                     row["first_seen_at"] = existing_row["first_seen_at"]
@@ -419,11 +375,9 @@ def run_all_tradera_searches(searches):
                 inserted += 1
             else:
                 skipped_unchanged += 1
-
         print(f"'{query}': {inserted} nya, {skipped_accessory} tillbehör, "
               f"{skipped_missing} saknar pris/märke, {skipped_unchanged} oförändrade.")
         run_stats.append({"query": query, "inserted": inserted})
-
     sold, removed, still_active, total_candidates = resolve_disappeared(previously_active_ids, seen_today_ids)
     print(f"Upplösning: {sold} bekräftat sålda, {removed} avslutade utan köpare, "
           f"{still_active} fortfarande aktiva, av {total_candidates} kandidater.")
@@ -432,7 +386,6 @@ def run_all_tradera_searches(searches):
         print(f"Produktmatchning: {match_result.data}")
     except Exception as e:
         print(f"Produktmatchning misslyckades: {e}")
-
     if RESEND_API_KEY and NOTIFY_EMAIL:
         total_new = sum(s["inserted"] for s in run_stats)
         html = f"<h2>Tradera-skrapning</h2><p>{total_new} nya annonser. {sold} sålda, {removed} avslutade utan köpare.</p>"
@@ -445,6 +398,5 @@ def run_all_tradera_searches(searches):
             )
         except Exception as e:
             print(f"Mejl misslyckades: {e}")
-
 if __name__ == "__main__":
     run_all_tradera_searches(TRADERA_SEARCHES)
