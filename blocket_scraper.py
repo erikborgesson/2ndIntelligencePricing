@@ -68,8 +68,17 @@ SEARCHES = [
     {"query": "iPhone 15", "max_pages": 3},
     {"query": "iPhone 14", "max_pages": 3},
     {"query": "iPhone 13", "max_pages": 3},
+    # Tidigare kända luckor -- lades till för att undvika permanent förlorad
+    # prishistorik för generationer som redan omsätts på andrahandsmarknaden,
+    # även om run_product_matching_v2 ännu inte har egna regex-grenar för dem
+    # (matchningen är retroaktiv, så det tas igen den dagen SQL-katalogen byggs ut).
+    {"query": "iPhone 12", "max_pages": 3},
+    {"query": "iPhone 11", "max_pages": 2},
+    {"query": "iPhone SE", "max_pages": 2},
     {"query": "Samsung Galaxy S23", "max_pages": 3},
     {"query": "Samsung Galaxy S24", "max_pages": 3},
+    {"query": "Samsung Galaxy S22", "max_pages": 2},
+    {"query": "Samsung Galaxy S21", "max_pages": 2},
     {"query": "Google Pixel", "max_pages": 3},
     {"query": "OnePlus", "max_pages": 2},
     {"query": "MacBook", "max_pages": 3},
