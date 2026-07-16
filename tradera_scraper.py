@@ -51,9 +51,14 @@ TRADERA_SEARCHES = [
     {"query": "iPad", "max_pages": 2},
     {"query": "Samsung Galaxy Tab", "max_pages": 2},
     {"query": "Bose hörlurar", "max_pages": 2},
+    # Nytt märke inom redan verifierad kategori -- Sony WH-1000-serien är en
+    # av världens mest omsatta andrahandshörlurar, saknades helt tidigare.
+    {"query": "Sony WH-1000", "max_pages": 2},
     {"query": "Samsung TV", "max_pages": 2},
     {"query": "DJI drönare", "max_pages": 2},
     {"query": "Apple Watch", "max_pages": 2},
+    # Nytt märke inom redan verifierad klock-kategori.
+    {"query": "Samsung Galaxy Watch", "max_pages": 2},
     {"query": "Sonos", "max_pages": 2},
     {"query": "Garmin klocka", "max_pages": 2},
 ]
