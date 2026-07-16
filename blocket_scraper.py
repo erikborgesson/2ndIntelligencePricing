@@ -155,15 +155,33 @@ def find_price(item, root):
         return float(offer_price) if offer_price is not None else None
     except (TypeError, ValueError):
         return None
-def search_all_pages(query, max_pages=3):
+def search_all_pages(query, max_pages=3, max_retries=3):
     """Blocket's own API caps results per call regardless of max_items --
-    real pagination is required to get more than ~50 results."""
+    real pagination is required to get more than ~50 results.
+    FIX: httpx.get() had no timeout and no retry handling -- a single
+    network hiccup (ReadTimeout) raised an uncaught exception straight out
+    of this function, which killed the whole script (skipping every later
+    search, the removal check, product matching, and the summary email).
+    Now it retries transient network errors with backoff, and if a page
+    still fails after max_retries it logs and returns what it has instead
+    of crashing the run."""
     all_docs = []
     for page in range(1, max_pages + 1):
-        response = httpx.get(
-            "https://blocket-api.se/v1/search",
-            params={"query": query, "page": page},
-        )
+        for attempt in range(1, max_retries + 1):
+            try:
+                response = httpx.get(
+                    "https://blocket-api.se/v1/search",
+                    params={"query": query, "page": page},
+                    timeout=30.0,
+                )
+                break
+            except (httpx.TimeoutException, httpx.TransportError) as e:
+                if attempt == max_retries:
+                    print(f"Sökning '{query}' sida {page} misslyckades efter {max_retries} försök: {e}")
+                    return all_docs
+                wait = 2 ** attempt
+                print(f"Nätverksfel på '{query}' sida {page} (försök {attempt}/{max_retries}): {e} -- väntar {wait}s")
+                time.sleep(wait)
         docs = response.json().get("docs", [])
         if not docs:
             break
@@ -316,7 +334,14 @@ def run_all_searches(searches, max_items=50):
         query = search_config["query"]
         discovery = search_config.get("discovery_mode", False)
         max_pages = search_config.get("max_pages", 3)
-        all_docs = search_all_pages(query, max_pages=max_pages)
+        try:
+            all_docs = search_all_pages(query, max_pages=max_pages)
+        except Exception as e:
+            # Extra skyddsnät: oavsett vad som går fel i sökningen ska en
+            # trasig sökterm inte stoppa resten av körningen (borttagningskontroll,
+            # produktmatchning, mejl).
+            print(f"Sökning '{query}' misslyckades helt, hoppar över: {e}")
+            continue
         inserted = skipped_category = skipped_missing = skipped_unchanged = 0
         category_counts = {}
         for item in all_docs[:max_items]:
