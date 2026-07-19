@@ -61,6 +61,31 @@ TRADERA_SEARCHES = [
     {"query": "Samsung Galaxy Watch", "max_pages": 2},
     {"query": "Sonos", "max_pages": 2},
     {"query": "Garmin klocka", "max_pages": 2},
+    # Nya kategorier -- GoPro/Surface redan kända märkesord i BRAND_KEYWORDS
+    # men saknade egen sökning. Tradera har ingen kategori-allowlist (bara
+    # märke/tillbehör-heuristik) så dessa kan aktiveras direkt, till skillnad
+    # från Blocket-versionen där kategori-strängen måste verifieras först.
+    {"query": "GoPro Hero 13", "max_pages": 2},
+    {"query": "GoPro Hero 12", "max_pages": 2},
+    {"query": "GoPro Hero 11", "max_pages": 2},
+    {"query": "GoPro Hero 10", "max_pages": 2},
+    {"query": "GoPro", "max_pages": 2},
+    {"query": "Surface Pro", "max_pages": 2},
+    {"query": "Surface Laptop", "max_pages": 2},
+    {"query": "Surface Go", "max_pages": 2},
+    {"query": "Elsparkcykel", "max_pages": 2},
+    {"query": "Elcykel", "max_pages": 2},
+    {"query": "Segway Ninebot", "max_pages": 2},
+    {"query": "Xiaomi elsparkcykel", "max_pages": 2},
+    {"query": "Robotdammsugare", "max_pages": 2},
+    {"query": "Roborock", "max_pages": 2},
+    {"query": "iRobot Roomba", "max_pages": 2},
+    {"query": "Dreame", "max_pages": 2},
+    {"query": "Kindle", "max_pages": 2},
+    {"query": "Kobo", "max_pages": 2},
+    {"query": "Steam Deck", "max_pages": 2},
+    {"query": "ROG Ally", "max_pages": 2},
+    {"query": "Nintendo 3DS", "max_pages": 2},
 ]
 ACCESSORY_KEYWORDS = [
     "skärmskydd", "skal", "case", "härdat glas", "laddare", "kabel",
@@ -70,6 +95,8 @@ ACCESSORY_KEYWORDS = [
     "mystery chest", "samlarobjekt", "figur",
     "extraproppar", "earphone tips", "ear tips", "memoryskum",
     "öronproppar", "hörlursproppar", "öronkuddar", "earpads",
+    "dammsugarpåse", "filter till dammsugare", "borste till dammsugare",
+    "sidoborste", "rengöringsverktyg",
 ]
 def looks_like_accessory(title):
     if not title:
@@ -82,6 +109,9 @@ HARDWARE_QUERY_TERMS = {
     "Xbox Series": ["xbox series", "xbox one"],
     "Xbox One": ["xbox one"],
     "Nintendo Switch": ["nintendo switch", "switch oled", "switch lite"],
+    "Steam Deck": ["steam deck", "steamdeck"],
+    "ROG Ally": ["rog ally"],
+    "Nintendo 3DS": ["nintendo 3ds", "3ds"],
 }
 SOFTWARE_INDICATOR_KEYWORDS = [
     "nedladdningskod", "digital kod", "download code", "season pass",
@@ -131,6 +161,15 @@ BRAND_KEYWORDS = {
     "Microsoft": ["xbox", "surface"],
     "Nintendo": ["nintendo switch"],
     "Garmin": ["garmin"],
+    "GoPro": ["gopro"],
+    "iRobot": ["irobot", "roomba"],
+    "Roborock": ["roborock"],
+    "Dreame": ["dreame"],
+    "Eufy": ["eufy"],
+    "Amazon": ["kindle"],
+    "Kobo": ["kobo"],
+    "Segway": ["segway", "ninebot"],
+    "Valve": ["steam deck", "steamdeck"],
 }
 def infer_brand_from_text(title, description):
     text = f"{title or ''} {description or ''}".lower()
