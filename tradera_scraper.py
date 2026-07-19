@@ -159,7 +159,7 @@ BRAND_KEYWORDS = {
     "Sonos": ["sonos"],
     "DJI": ["dji", "mavic", "phantom"],
     "Microsoft": ["xbox", "surface"],
-    "Nintendo": ["nintendo switch"],
+    "Nintendo": ["nintendo switch", "nintendo 3ds", "3ds", "2ds"],
     "Garmin": ["garmin"],
     "GoPro": ["gopro"],
     "iRobot": ["irobot", "roomba"],
@@ -411,6 +411,12 @@ def run_all_tradera_searches(searches):
                 continue
             if not row["current_asking_price"] or not row["brand"]:
                 skipped_missing += 1
+                # Tillfällig diagnos: rader som hoppas över sparas aldrig,
+                # så utan detta går det inte att i efterhand se vilka märken
+                # som saknas i BRAND_KEYWORDS. Ta bort när nya kategorier är
+                # mättade med rätt märkesord.
+                if not row["brand"]:
+                    print(f"    [okänt märke] '{row['original_title']}'")
                 continue
             seen_today_ids.add(row["listing_id"])
             existing = execute_with_retry(
