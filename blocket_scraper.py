@@ -55,6 +55,14 @@ BRAND_KEYWORDS = {
     "GoPro": ["gopro"],
     "LG": ["lg oled", "lg tv"],
     "Garmin": ["garmin"],
+    "iRobot": ["irobot", "roomba"],
+    "Roborock": ["roborock"],
+    "Dreame": ["dreame"],
+    "Eufy": ["eufy"],
+    "Amazon": ["kindle"],
+    "Kobo": ["kobo"],
+    "Segway": ["segway", "ninebot"],
+    "Valve": ["steam deck", "steamdeck"],
 }
 CONDITION_KEYWORDS = {
     "Ny / oanvänd": ["helt ny", "oanvänd", "nyskick", "ny skick"],
@@ -116,6 +124,31 @@ SEARCHES = [
     {"query": "Garmin klocka", "max_pages": 2},
     # Borttagen: "AirPods" -- söktermen matchar inte Blockets kategoristruktur (2 träffar totalt över flera körningar)
 
+    # ---- Helt nya kategorier -- discovery_mode tills kategori-strängarna är
+    # verifierade. Dessa filtreras/skrivs INTE till databasen än, de bara
+    # skriver ut vilka Blocket-kategorier resultaten faktiskt tillhör så vi
+    # kan lägga till korrekta ALLOWED_CATEGORIES-poster innan vi litar på dem. ----
+    {"query": "GoPro Hero 13", "max_pages": 2, "discovery_mode": True},
+    {"query": "GoPro Hero 12", "max_pages": 2, "discovery_mode": True},
+    {"query": "GoPro Hero 11", "max_pages": 2, "discovery_mode": True},
+    {"query": "GoPro Hero 10", "max_pages": 2, "discovery_mode": True},
+    {"query": "GoPro", "max_pages": 2, "discovery_mode": True},
+    {"query": "Surface Pro", "max_pages": 2, "discovery_mode": True},
+    {"query": "Surface Laptop", "max_pages": 2, "discovery_mode": True},
+    {"query": "Surface Go", "max_pages": 2, "discovery_mode": True},
+    {"query": "Elsparkcykel", "max_pages": 2, "discovery_mode": True},
+    {"query": "Elcykel", "max_pages": 2, "discovery_mode": True},
+    {"query": "Segway Ninebot", "max_pages": 2, "discovery_mode": True},
+    {"query": "Xiaomi elsparkcykel", "max_pages": 2, "discovery_mode": True},
+    {"query": "Robotdammsugare", "max_pages": 2, "discovery_mode": True},
+    {"query": "Roborock", "max_pages": 2, "discovery_mode": True},
+    {"query": "iRobot Roomba", "max_pages": 2, "discovery_mode": True},
+    {"query": "Dreame", "max_pages": 2, "discovery_mode": True},
+    {"query": "Kindle", "max_pages": 2, "discovery_mode": True},
+    {"query": "Kobo", "max_pages": 2, "discovery_mode": True},
+    {"query": "Steam Deck", "max_pages": 2, "discovery_mode": True},
+    {"query": "ROG Ally", "max_pages": 2, "discovery_mode": True},
+    {"query": "Nintendo 3DS", "max_pages": 2, "discovery_mode": True},
 ]
 def send_summary_email(run_stats, marked_removed, total_disappeared):
     if not RESEND_API_KEY or not NOTIFY_EMAIL:
